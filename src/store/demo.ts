@@ -1,4 +1,4 @@
-import type { Company, Contractor, Cost, Invoice } from "@/lib/types";
+import type { Company, Contractor, Cost, FixedAsset, Invoice } from "@/lib/types";
 
 const id = (p: string, n: number) => `${p}${n}`;
 
@@ -73,5 +73,10 @@ export function demoData() {
     if (m === 3)
       costs.push({ id: "laptop", docNumber: "FV/2026/0311", date: `${year}-03-11`, supplierName: "x-kom sp. z o.o.", supplierNip: "6111000000", description: "Laptop do pracy", category: "sprzet", net: 7300, vatRate: "23", vat: 1679, vatDeduction: "pelne", costShare: 1, isFixedAsset: false, paid: true, createdAt: `${year}-03-11` });
   }
-  return { company, contractors, invoices, costs, chat: [], dismissedTips: [] };
+  costs.push({ id: "auto", docNumber: "FV/0412/2026/SAL", date: `${year}-02-12`, supplierName: "Auto Salon Warszawa Sp. z o.o.", supplierNip: "5250000000", description: "Samochód osobowy (hybryda) — użytek mieszany", category: "samochod", net: 110000, vatRate: "23", vat: 25300, vatDeduction: "polowa", costShare: 1, isFixedAsset: true, paid: true, createdAt: `${year}-02-12` });
+  const assets: FixedAsset[] = [
+    { id: "st1", name: "Samochód osobowy Toyota Corolla Hybrid", inventoryNo: "ST/1", startDate: `${year}-02-15`, documentNo: "FV/0412/2026/SAL", initialValue: 122650, kstGroup: "741", rate: 0.2, method: "liniowa", carLimit: "150000", costShare: 1, costId: "auto", isIntangible: false, createdAt: `${year}-02-15` },
+    { id: "st2", name: "MacBook Pro 16\"", inventoryNo: "ST/2", startDate: `${year - 1}-09-20`, documentNo: "FV/2025/0920", initialValue: 14500, kstGroup: "491", rate: 0.3, method: "liniowa", carLimit: "brak", costShare: 1, isIntangible: false, createdAt: `${year - 1}-09-20` },
+  ];
+  return { company, contractors, invoices, costs, assets, chat: [], dismissedTips: [] };
 }

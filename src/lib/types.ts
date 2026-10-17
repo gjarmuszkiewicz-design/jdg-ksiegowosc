@@ -138,3 +138,33 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+export type DepreciationMethod = "liniowa" | "degresywna" | "jednorazowa_de_minimis" | "jednorazowa_niskocenna";
+export type CarLimit = "brak" | "150000" | "100000" | "225000";
+
+/** Pozycja ewidencji środków trwałych i wartości niematerialnych i prawnych */
+export interface FixedAsset {
+  id: string;
+  name: string;
+  /** Numer inwentarzowy */
+  inventoryNo: string;
+  /** Data przyjęcia do używania — odpisy zaczynają się od następnego miesiąca */
+  startDate: string;
+  documentNo: string;
+  /** Wartość początkowa: cena netto + nieodliczony VAT + koszty dodatkowe */
+  initialValue: number;
+  kstGroup: string;
+  /** Roczna stawka amortyzacji (ułamek) */
+  rate: number;
+  method: DepreciationMethod;
+  /** Limit wartości samochodu osobowego dla kosztów amortyzacji */
+  carLimit: CarLimit;
+  /** Udział w kosztach poza limitem (np. 1) */
+  costShare: number;
+  /** Data likwidacji / sprzedaży — odpisy kończą się w tym miesiącu */
+  disposalDate?: string;
+  /** Powiązany dokument kosztowy — jego wartość nie trafia drugi raz do kosztów */
+  costId?: string;
+  isIntangible: boolean;
+  createdAt: string;
+}

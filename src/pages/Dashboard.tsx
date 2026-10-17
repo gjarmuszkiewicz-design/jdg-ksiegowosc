@@ -21,7 +21,7 @@ const toneStyles = {
 const kindColors: Record<string, string> = { zus: "bg-emerald-500", pit: "bg-brand-500", vat: "bg-violet-500", roczne: "bg-rose-500", inne: "bg-amber-500" };
 
 export default function Dashboard() {
-  const { company, contractors, invoices, costs, dismissedTips, dismissTip } = useStore();
+  const { company, contractors, invoices, costs, assets, dismissedTips, dismissTip } = useStore();
   const year = currentYear();
   const summary = useYearSummary(year);
   const m = new Date().getMonth();
@@ -29,7 +29,7 @@ export default function Dashboard() {
   const prev = m > 0 ? summary[m - 1] : undefined;
 
   const steps = useMemo(() => nextSteps({ company, contractors, invoices, costs }), [company, contractors, invoices, costs]);
-  const tips = useMemo(() => insights({ company, contractors, invoices, costs }).filter((t) => !dismissedTips.includes(t.id)), [company, contractors, invoices, costs, dismissedTips]);
+  const tips = useMemo(() => insights({ company, contractors, invoices, costs, assets }).filter((t) => !dismissedTips.includes(t.id)), [company, contractors, invoices, costs, assets, dismissedTips]);
   const deadlines = useMemo(() => upcomingDeadlines(company), [company]);
 
   const unpaid = invoices.filter((i) => i.status !== "oplacona" && i.status !== "szkic");
@@ -71,7 +71,7 @@ export default function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Przychód w tym miesiącu" value={pln(cur?.revenue ?? 0)} sub={`${cur?.invoicesCount ?? 0} faktur`} icon={<TrendingUp className="h-5 w-5" />} tone="blue" />
         <Stat label="Koszty w tym miesiącu" value={pln(cur?.kup ?? 0)} sub={company.taxForm === "ryczalt" ? "Na ryczałcie nie obniżają podatku" : `${cur?.costsCount ?? 0} dokumentów`} icon={<Receipt className="h-5 w-5" />} tone="amber" />
-        <Stat label="Do zapłaty do 20/25." value={pln(toPay)} sub="ZUS + podatek + VAT za poprzedni miesiąc" icon={<Landmark className="h-5 w-5" />} tone="violet" hint="Suma składek ZUS, zaliczki na PIT i VAT za poprzedni miesiąc — płatne w tym miesiącu." />
+        <Stat label="Do zapłaty do 20/25." value={pln(toPay)} sub={<Link to="/podatki" className="font-semibold text-brand-600 hover:underline">Szczegóły i symulacja →</Link>} icon={<Landmark className="h-5 w-5" />} tone="violet" hint="Suma składek ZUS, zaliczki na PIT i VAT za poprzedni miesiąc — płatne w tym miesiącu." />
         <Stat label="Nieopłacone faktury" value={pln(unpaidSum)} sub={overdue.length ? <span className="font-semibold text-rose-600">{overdue.length} po terminie</span> : `${unpaid.length} oczekuje`} icon={<CircleDollarSign className="h-5 w-5" />} tone={overdue.length ? "rose" : "green"} />
       </div>
 

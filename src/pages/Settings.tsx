@@ -22,14 +22,14 @@ export default function Settings() {
   const save = () => { store.setCompany(draft); setSaved(true); };
 
   const exportBackup = () => {
-    const { company, contractors, invoices, costs } = useStore.getState();
-    downloadFile(`kopia-ksiegowosc-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ version: 1, company, contractors, invoices, costs }, null, 2), "application/json");
+    const { company, contractors, invoices, costs, assets } = useStore.getState();
+    downloadFile(`kopia-ksiegowosc-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ version: 2, company, contractors, invoices, costs, assets }, null, 2), "application/json");
   };
   const importBackup = async (f: File) => {
     try {
       const data = JSON.parse(await f.text());
       if (!data.company || !Array.isArray(data.invoices)) throw new Error();
-      useStore.setState({ company: data.company, contractors: data.contractors ?? [], invoices: data.invoices, costs: data.costs ?? [] });
+      useStore.setState({ company: data.company, contractors: data.contractors ?? [], invoices: data.invoices, costs: data.costs ?? [], assets: data.assets ?? [] });
       setDraft(data.company);
       alert("Kopia przywrócona.");
     } catch {

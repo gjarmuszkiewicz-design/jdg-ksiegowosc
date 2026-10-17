@@ -1,7 +1,8 @@
+import { monthlyDepreciation } from "./assets";
 import { PARAMS_2026 as P } from "./config2026";
 import { invoiceTotals, rateValue } from "./invoice";
 import { round2 } from "./money";
-import type { Company, Cost, Invoice, TaxForm, VatRate } from "./types";
+import type { Company, Cost, FixedAsset, Invoice, TaxForm, VatRate } from "./types";
 
 export const monthKey = (date: string) => date.slice(0, 7);
 export const prevMonthKey = (mk: string) => {
@@ -76,6 +77,10 @@ export interface MonthSummary {
   active: boolean;
   revenue: number;
   kup: number;
+  /** Koszty z dokumentów (bez amortyzacji) */
+  kupDocs: number;
+  /** Odpisy amortyzacyjne zaliczone do kosztów */
+  depreciation: number;
   invoicesCount: number;
   costsCount: number;
   vatOut: number;
@@ -93,15 +98,22 @@ export interface MonthSummary {
   pit: number; // zaliczka za miesiąc
   revenueYtd: number;
   kupYtd: number;
+  socialYtd: number;
+  healthDedYtd: number;
+  /** Suma zaliczek zapłaconych za wcześniejsze miesiące roku */
+  taxPrevYtd: number;
+  /** Dochód poprzedniego miesiąca — podstawa zdrowotnej (skala/liniowy) */
+  healthBase: number;
 }
 
 export interface YearData {
   company: Company;
   invoices: Invoice[];
   costs: Cost[];
+  assets?: FixedAsset[];
 }
 
-function pitFromBase(form: TaxForm, base: number, ryczaltRate: number) {
+export function pitFromBase(form: TaxForm, base: number, ryczaltRate: number) {
   const b = Math.max(0, Math.round(base));
   if (form === "skala") {
     const s = P.pit.skala;
@@ -112,13 +124,14 @@ function pitFromBase(form: TaxForm, base: number, ryczaltRate: number) {
   return Math.round(b * ryczaltRate);
 }
 
-export function yearSummary({ company, invoices, costs }: YearData, year: number): MonthSummary[] {
+export function yearSummary({ company, invoices, costs, assets = [] }: YearData, year: number): MonthSummary[] {
   const startMk = company.startDate ? monthKey(company.startDate) : `${year}-01`;
   const social = zusSocial(company).social;
   const result: MonthSummary[] = [];
   let revenueYtd = 0, kupYtd = 0, socialYtd = 0, healthDedYtd = 0, taxPrevYtd = 0;
   let vatCarry = 0;
   let prevIncome: number | null = null;
+  const linkedCosts = new Set(assets.map((a) => a.costId).filter(Boolean));
 
   for (let m = 1; m <= 12; m++) {
     const mk = `${year}-${String(m).padStart(2, "0")}`;
@@ -128,7 +141,10 @@ export function yearSummary({ company, invoices, costs }: YearData, year: number
     const mCost = costs.filter((c) => monthKey(c.date) === mk);
 
     const revenue = round2(mInv.reduce((s, i) => s + invoiceRevenue(i), 0));
-    const kup = company.taxForm === "ryczalt" ? 0 : round2(mCost.reduce((s, c) => s + costKup(c, company), 0));
+    const isRycz = company.taxForm === "ryczalt";
+    const kupDocs = isRycz ? 0 : round2(mCost.filter((c) => !linkedCosts.has(c.id)).reduce((s, c) => s + costKup(c, company), 0));
+    const depreciation = isRycz ? 0 : monthlyDepreciation(assets, mk).deductible;
+    const kup = round2(kupDocs + depreciation);
 
     // VAT
     const vatByRate: Record<string, { net: number; vat: number }> = {};
@@ -152,12 +168,13 @@ export function yearSummary({ company, invoices, costs }: YearData, year: number
     kupYtd = round2(kupYtd + kup);
 
     let health = 0;
+    const healthBase = m === 1 ? 0 : Math.max(0, prevIncome ?? 0);
     if (active) {
       if (company.taxForm === "ryczalt") health = ryczaltHealth(revenueYtd);
       else {
         const rate = company.taxForm === "skala" ? P.health.skalaRate : P.health.liniowyRate;
         const minimum = m === 1 ? P.health.minimumJanuary : P.health.minimum;
-        health = round2(Math.max(minimum, (prevIncome ?? 0) * rate));
+        health = round2(Math.max(minimum, healthBase * rate));
       }
     }
     const prevHealth = result.length ? result[result.length - 1].health : 0;
@@ -178,13 +195,15 @@ export function yearSummary({ company, invoices, costs }: YearData, year: number
       company.taxForm === "ryczalt" ? revenueYtd - socialYtd - healthDedYtd : revenueYtd - kupYtd - socialYtd - (company.taxForm === "liniowy" ? healthDedYtd : 0);
     const taxYtd = pitFromBase(company.taxForm, taxBaseYtd, company.ryczaltRate);
     const pit = Math.max(0, taxYtd - taxPrevYtd);
+    const paidBefore = taxPrevYtd;
     taxPrevYtd = Math.max(taxPrevYtd, taxYtd);
 
     result.push({
-      month: mk, active, revenue, kup, invoicesCount: mInv.length, costsCount: mCost.length,
+      month: mk, active, revenue, kup, kupDocs, depreciation, invoicesCount: mInv.length, costsCount: mCost.length,
       vatOut, vatIn, vatByRate, vatDue, vatCarry: Math.round(vatCarry),
       social: monthSocial, health, socialDeducted, healthDeducted, income,
       taxBaseYtd: Math.max(0, Math.round(taxBaseYtd)), taxYtd, pit, revenueYtd, kupYtd,
+      socialYtd, healthDedYtd, taxPrevYtd: paidBefore, healthBase,
     });
   }
   return result;

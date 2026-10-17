@@ -7,7 +7,17 @@ export function useYearSummary(year: number) {
   const company = useStore((s) => s.company);
   const invoices = useStore((s) => s.invoices);
   const costs = useStore((s) => s.costs);
-  return useMemo(() => yearSummary({ company, invoices, costs }, year), [company, invoices, costs, year]);
+  const assets = useStore((s) => s.assets);
+  return useMemo(() => yearSummary({ company, invoices, costs, assets }, year), [company, invoices, costs, assets, year]);
+}
+
+/** Wszystkie dane potrzebne silnikowi obliczeń */
+export function useYearData() {
+  const company = useStore((s) => s.company);
+  const invoices = useStore((s) => s.invoices);
+  const costs = useStore((s) => s.costs);
+  const assets = useStore((s) => s.assets);
+  return useMemo(() => ({ company, invoices, costs, assets }), [company, invoices, costs, assets]);
 }
 
 export const currentYear = () => new Date().getFullYear();

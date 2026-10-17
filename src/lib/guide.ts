@@ -3,7 +3,7 @@ import { isOverdue } from "./invoice";
 import { pln } from "./money";
 import { monthKey, monthLabel, prevMonthKey, yearSummary } from "./tax";
 import { isValidIban, isValidNip } from "./validation";
-import type { Company, Contractor, Cost, Invoice } from "./types";
+import type { Company, Contractor, Cost, FixedAsset, Invoice } from "./types";
 
 export interface GuideStep {
   id: string;
@@ -27,6 +27,7 @@ interface Ctx {
   contractors: Contractor[];
   invoices: Invoice[];
   costs: Cost[];
+  assets?: FixedAsset[];
 }
 
 /** Lista „co teraz zrobić” — prowadzenie za rękę */
