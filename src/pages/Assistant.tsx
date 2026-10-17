@@ -98,17 +98,31 @@ export function Markdown({ text }: { text: string }) {
 
 // ───────────── strona asystenta ─────────────
 
+// Rozmowa i trwające generowanie żyją poza komponentem — przejście na inną stronę
+// w trakcie odpowiedzi nie przerywa jej i nie gubi wiadomości.
+const chatRuntime = { busy: false, controller: null as AbortController | null, listeners: new Set<() => void>() };
+const setBusyGlobal = (v: boolean) => {
+  chatRuntime.busy = v;
+  chatRuntime.listeners.forEach((l) => l());
+};
+
 export default function Assistant() {
-  const chat = useStore((s) => s.chat);
+  const messages = useStore((s) => s.chat);
   const setChat = useStore((s) => s.setChat);
   const company = useStore((s) => s.company);
   const invoices = useStore((s) => s.invoices);
   const year = currentYear();
   const summary = useYearSummary(year);
-  const [messages, setMessages] = useState<ChatMessage[]>(chat);
+  const setMessages = setChat;
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const [busy, setBusyState] = useState(chatRuntime.busy);
+  useEffect(() => {
+    const l = () => setBusyState(chatRuntime.busy);
+    chatRuntime.listeners.add(l);
+    return () => void chatRuntime.listeners.delete(l);
+  }, []);
+  const setBusy = setBusyGlobal;
+  const abortRef = { get current() { return chatRuntime.controller; }, set current(c: AbortController | null) { chatRuntime.controller = c; } };
   const bottomRef = useRef<HTMLDivElement>(null);
   const [params, setParams] = useSearchParams();
   const autoSent = useRef(false);
@@ -150,8 +164,8 @@ export default function Assistant() {
 
   async function ask(question: string) {
     const q = question.trim();
-    if (!q || busy) return;
-    const history: ChatMessage[] = [...messages, { role: "user", content: q }];
+    if (!q || chatRuntime.busy) return;
+    const history: ChatMessage[] = [...useStore.getState().chat, { role: "user", content: q }];
     setMessages([...history, { role: "assistant", content: "" }]);
     setInput("");
     setBusy(true);
@@ -196,7 +210,6 @@ export default function Assistant() {
       } else if (!answer) answer = "_(zatrzymano)_";
     } finally {
       const finalMessages: ChatMessage[] = [...history, { role: "assistant", content: answer || "_(brak odpowiedzi)_" }];
-      setMessages(finalMessages);
       setChat(finalMessages);
       setBusy(false);
       abortRef.current = null;

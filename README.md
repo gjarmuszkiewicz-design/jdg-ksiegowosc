@@ -33,18 +33,26 @@ Produkcja: `npm run build && npm start` (serwer Express serwuje zbudowany front 
 
 Testy obliczeń: `npm test`. Kontrola typów: `npm run typecheck`.
 
-## Wdrożenie na Railway (wersja próbna)
+## Wdrożenie na Railway
 
-1. Na railway.com: **New Project → Deploy from GitHub repo** i wybierz repozytorium (jeśli aplikacja leży w podkatalogu, ustaw *Root Directory* na `jdg-app`).
-2. Railway zbuduje obraz z `Dockerfile` (konfiguracja w `railway.json`, healthcheck `/api/health`).
-3. W zakładce **Variables** ustaw:
-   - `APP_PASSWORD` — hasło do strony (zalecane, żeby nikt obcy nie korzystał z klucza AI),
-   - `ANTHROPIC_API_KEY` — włącza asystenta AI (bez niego działa tryb bazy wiedzy),
-   - opcjonalnie `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` — wysyłka faktur e-mailem.
-   `PORT` ustawia Railway sam.
-4. **Settings → Networking → Generate Domain** — dostaniesz adres `https://…up.railway.app`.
+1. **New Project → Deploy from GitHub repo** → to repozytorium. Railway zbuduje obraz z `Dockerfile`.
+2. W projekcie **+ New → Database → PostgreSQL**, a w usłudze aplikacji w **Variables** dodaj referencję `DATABASE_URL` → `${{Postgres.DATABASE_URL}}`. Bez bazy dane są w pliku i znikają przy każdym wdrożeniu.
+3. **Variables** aplikacji (opcjonalnie):
+   - `ANTHROPIC_API_KEY` — asystent AI (bez klucza: tryb bazy wiedzy),
+   - `ALLOW_REGISTRATION=true` — jeśli inni mają zakładać konta (domyślnie tylko pierwsze konto),
+   - `AI_LIMIT_HOUR`, `AI_LIMIT_DAY` — limity pytań do AI na użytkownika,
+   - `SMTP_*` — wysyłka faktur e-mailem.
+4. **Settings → Networking → Generate Domain**. Pierwsza osoba, która wejdzie na stronę, zakłada konto właściciela.
 
-Dane w wersji próbnej są zapisywane w przeglądarce każdego użytkownika (kopia zapasowa w Ustawieniach).
+## Logowanie i dane
+
+- Konta z hasłem (scrypt), sesja w ciasteczku HttpOnly na 30 dni, blokada po wielu nieudanych próbach.
+- Dane księgowe każdego użytkownika są na serwerze (PostgreSQL) i zapisują się automatycznie; po wylogowaniu znikają z przeglądarki.
+- Asystent AI odpowiada wyłącznie na pytania podatkowo-księgowe: filtr tematyczny (Claude Haiku) przed każdym pytaniem, ograniczenia w instrukcji, limity pytań i długości, wyszukiwanie tylko w serwisach urzędowych i podatkowych.
+
+## Import historii
+
+Zakładka **Import danych**: pliki JPK_V7M/K (najlepsze dla VAT-owców), JPK_FA, e-faktury KSeF (XML), CSV z wFirma / iFirma / Fakturowni (z mapowaniem kolumn), bilans otwarcia przy przejściu w trakcie roku, kopia JSON tej aplikacji.
 
 ## Architektura
 
@@ -54,7 +62,6 @@ Dane w wersji próbnej są zapisywane w przeglądarce każdego użytkownika (kop
 
 ## Ograniczenia obecnej wersji
 
-- Dane są przechowywane lokalnie w przeglądarce (z kopią zapasową JSON) — docelowo baza danych i konta użytkowników.
 - KSeF działa domyślnie w **trybie symulacji**. Klient API KSeF 2.0 (`server/ksef.ts`) trzeba zweryfikować na środowisku testowym MF (miejsca oznaczone `WERYFIKUJ`) przed włączeniem `KSEF_MODE=live`.
 - Plik JPK_V7M jest generowany do pobrania; podpis i wysyłkę robi się np. w e-mikrofirmie lub Kliencie JPK. Przed wysyłką warto sprawdzić plik walidatorem MF.
 - Obliczenia są pomocnicze: brak korekt faktur, świąt w terminach, sprzedaży środków trwałych z zyskiem/stratą i kursów walut.

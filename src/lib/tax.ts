@@ -132,13 +132,25 @@ export function yearSummary({ company, invoices, costs, assets = [] }: YearData,
   let vatCarry = 0;
   let prevIncome: number | null = null;
   const linkedCosts = new Set(assets.map((a) => a.costId).filter(Boolean));
+  const ob = company.openingBalance?.year === year ? company.openingBalance : undefined;
 
   for (let m = 1; m <= 12; m++) {
     const mk = `${year}-${String(m).padStart(2, "0")}`;
-    const active = mk >= startMk;
-    const prevActive = prevMonthKey(mk) >= startMk;
-    const mInv = invoices.filter((i) => booked(i) && monthKey(i.saleDate || i.issueDate) === mk);
-    const mCost = costs.filter((c) => monthKey(c.date) === mk);
+    // Miesiące sprzed bilansu otwarcia są już zawarte w sumach z poprzedniego programu
+    const beforeOpening = ob ? m < ob.fromMonth : false;
+    const active = mk >= startMk && !beforeOpening;
+    const prevActive = prevMonthKey(mk) >= startMk && !(ob && m < ob.fromMonth);
+    if (ob && m === ob.fromMonth) {
+      revenueYtd = round2(revenueYtd + ob.revenue);
+      kupYtd = round2(kupYtd + ob.costs);
+      socialYtd = round2(socialYtd + ob.social);
+      healthDedYtd = round2(healthDedYtd + ob.healthDeducted);
+      taxPrevYtd = ob.taxPaid;
+      vatCarry = ob.vatCarry;
+      prevIncome = ob.lastMonthIncome;
+    }
+    const mInv = beforeOpening ? [] : invoices.filter((i) => booked(i) && monthKey(i.saleDate || i.issueDate) === mk);
+    const mCost = beforeOpening ? [] : costs.filter((c) => monthKey(c.date) === mk);
 
     const revenue = round2(mInv.reduce((s, i) => s + invoiceRevenue(i), 0));
     const isRycz = company.taxForm === "ryczalt";
@@ -177,7 +189,13 @@ export function yearSummary({ company, invoices, costs, assets = [] }: YearData,
         health = round2(Math.max(minimum, healthBase * rate));
       }
     }
-    const prevHealth = result.length ? result[result.length - 1].health : 0;
+    let prevHealth = result.length ? result[result.length - 1].health : 0;
+    // Pierwszy miesiąc po bilansie otwarcia: zdrowotna za poprzedni miesiąc (zapłacona teraz) — szacunek
+    if (ob && m === ob.fromMonth && m > 1)
+      prevHealth =
+        company.taxForm === "ryczalt"
+          ? ryczaltHealth(ob.revenue)
+          : round2(Math.max(P.health.minimum, ob.lastMonthIncome * (company.taxForm === "skala" ? P.health.skalaRate : P.health.liniowyRate)));
     const healthDeducted =
       company.taxForm === "liniowy"
         ? Math.min(prevHealth, Math.max(0, P.health.liniowyDeductionLimit - healthDedYtd))

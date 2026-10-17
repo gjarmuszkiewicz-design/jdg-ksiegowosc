@@ -40,6 +40,30 @@ export interface Company {
   invoiceNumberPattern: string;
   defaultPaymentDays: number;
   ksefToken: string;
+  /** Stan otwarcia przy przejściu z innego programu w trakcie roku */
+  openingBalance?: OpeningBalance;
+}
+
+/**
+ * Bilans otwarcia: sumy narastające z poprzedniego programu na początek miesiąca `fromMonth`.
+ * Dokumenty sprzed `fromMonth` danego roku nie są wtedy brane do obliczeń (żeby nie liczyć ich dwa razy).
+ */
+export interface OpeningBalance {
+  year: number;
+  /** Pierwszy miesiąc (1–12) prowadzony w tej aplikacji */
+  fromMonth: number;
+  revenue: number;
+  costs: number;
+  /** Składki społeczne odliczone narastająco */
+  social: number;
+  /** Zdrowotna odliczona narastająco (liniowy) lub 50% (ryczałt) */
+  healthDeducted: number;
+  /** Zaliczki / ryczałt zapłacone narastająco */
+  taxPaid: number;
+  /** Nadwyżka VAT do przeniesienia z poprzedniego miesiąca */
+  vatCarry: number;
+  /** Dochód z ostatniego miesiąca przed `fromMonth` (podstawa zdrowotnej) */
+  lastMonthIncome: number;
 }
 
 export interface Contractor {
@@ -79,6 +103,8 @@ export interface Invoice {
   paidDate?: string;
   ksef: { status: KsefStatus; number?: string; sentAt?: string; message?: string };
   createdAt: string;
+  /** Skąd pochodzi dokument, np. "import:JPK_V7M" */
+  source?: string;
 }
 
 export type CostCategory =
@@ -116,6 +142,7 @@ export interface Cost {
   paid: boolean;
   ksefNumber?: string;
   createdAt: string;
+  source?: string;
 }
 
 export interface ZusPayment {

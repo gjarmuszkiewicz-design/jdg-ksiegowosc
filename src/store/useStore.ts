@@ -52,6 +52,8 @@ interface State {
   deleteCost: (id: string) => void;
   upsertAsset: (a: FixedAsset) => void;
   deleteAsset: (id: string) => void;
+  /** Dodaje wiele dokumentów naraz (import) — istniejące o tym samym id są nadpisywane */
+  importBatch: (b: { invoices?: Invoice[]; costs?: Cost[]; contractors?: Contractor[]; assets?: FixedAsset[] }) => void;
   setChat: (m: ChatMessage[]) => void;
   dismissTip: (id: string) => void;
   loadDemo: () => void;
@@ -81,6 +83,15 @@ export const useStore = create<State>()(
       deleteCost: (id) => set((s) => ({ costs: s.costs.filter((c) => c.id !== id) })),
       upsertAsset: (a) => set((s) => ({ assets: upsert(s.assets, a) })),
       deleteAsset: (id) => set((s) => ({ assets: s.assets.filter((a) => a.id !== id) })),
+      importBatch: (b) =>
+        set((s) => {
+          const merge = <T extends { id: string }>(list: T[], add?: T[]) => {
+            if (!add?.length) return list;
+            const ids = new Set(add.map((x) => x.id));
+            return [...add, ...list.filter((x) => !ids.has(x.id))];
+          };
+          return { invoices: merge(s.invoices, b.invoices), costs: merge(s.costs, b.costs), contractors: merge(s.contractors, b.contractors), assets: merge(s.assets, b.assets) };
+        }),
       setChat: (chat) => set({ chat }),
       dismissTip: (id) => set((s) => ({ dismissedTips: [...s.dismissedTips, id] })),
       loadDemo: () => set(demoData()),

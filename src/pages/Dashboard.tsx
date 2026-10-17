@@ -60,7 +60,7 @@ export default function Dashboard() {
             <Button to="/faktury/nowa" className="!bg-white !from-white !to-white !text-brand-700 hover:!bg-brand-50" icon={<FileText className="h-4 w-4" />}>
               Wystaw fakturę
             </Button>
-            <Button to="/asystent" variant="ghost" className="bg-white/10 !text-white hover:bg-white/20" icon={<Sparkles className="h-4 w-4" />}>
+            <Button to={`/asystent?pytanie=${encodeURIComponent("Co powinienem zrobić w tym miesiącu w mojej firmie? Wypisz kroki i terminy.")}`} variant="ghost" className="bg-white/10 !text-white hover:bg-white/20" icon={<Sparkles className="h-4 w-4" />}>
               Co dziś zrobić?
             </Button>
           </div>

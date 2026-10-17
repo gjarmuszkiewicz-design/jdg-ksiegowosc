@@ -1,9 +1,10 @@
-import { Building2, CloudUpload, Database, Download, Landmark, RotateCcw, Save, ShieldCheck, Upload, Wallet } from "lucide-react";
+import { KeyRound, Building2, CloudUpload, Database, Download, Landmark, RotateCcw, Save, ShieldCheck, Upload, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BankFields, IdentityFields, TaxFields, ZusFields } from "@/components/CompanyFields";
 import { Button, Card, CardHeader, Field, Modal, PageHeader, Tip } from "@/components/ui";
 import { downloadFile } from "@/lib/xml";
 import type { Company } from "@/lib/types";
+import { changePassword, useSession } from "@/store/session";
 import { useStore } from "@/store/useStore";
 
 export default function Settings() {
@@ -64,6 +65,7 @@ export default function Settings() {
             </Field>
           </div>,
         )}
+        {section("Konto i hasło", <KeyRound className="h-5 w-5" />, <PasswordForm />)}
         {section(
           "Dane i kopia zapasowa",
           <Database className="h-5 w-5" />,
@@ -89,6 +91,34 @@ export default function Settings() {
       <Modal open={confirmReset} onClose={() => setConfirmReset(false)} title="Wyczyścić wszystkie dane?" footer={<><Button variant="secondary" onClick={() => setConfirmReset(false)}>Anuluj</Button><Button variant="danger" onClick={() => store.resetAll()}>Tak, usuń wszystko</Button></>}>
         <p className="text-sm text-slate-600">Usuniesz firmę, faktury, koszty i kontrahentów z tej przeglądarki. Tej operacji nie można cofnąć — najpierw pobierz kopię zapasową.</p>
       </Modal>
+    </div>
+  );
+}
+
+function PasswordForm() {
+  const user = useSession((s) => s.user);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const submit = async () => {
+    try {
+      await changePassword(current, next);
+      setMsg({ ok: true, text: "Hasło zmienione. Inne zalogowane urządzenia zostały wylogowane." });
+      setCurrent("");
+      setNext("");
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">Zalogowano jako <b>{user?.email}</b>.</p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Obecne hasło"><input className="input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" /></Field>
+        <Field label="Nowe hasło" hint="Co najmniej 8 znaków."><input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" /></Field>
+        <div className="flex items-end"><Button variant="secondary" disabled={!current || next.length < 8} onClick={submit}>Zmień hasło</Button></div>
+      </div>
+      {msg && <Tip tone={msg.ok ? "success" : "warning"}>{msg.text}</Tip>}
     </div>
   );
 }

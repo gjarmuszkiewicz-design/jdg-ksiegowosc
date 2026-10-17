@@ -1,4 +1,9 @@
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { initSession, useSession } from "./store/session";
+import Login from "./pages/Login";
+import Import from "./pages/Import";
 import Layout from "./components/Layout";
 import { useStore } from "./store/useStore";
 import Dashboard from "./pages/Dashboard";
@@ -24,8 +29,23 @@ import Assets from "./pages/Assets";
 import AssetForm from "./pages/AssetForm";
 import CostGuide from "./pages/CostGuide";
 
+function Splash({ text }: { text: string }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-slate-50">
+      <div className="flex items-center gap-3 text-slate-500"><Loader2 className="h-5 w-5 animate-spin text-brand-500" /> {text}</div>
+    </div>
+  );
+}
+
 export default function App() {
   const onboarded = useStore((s) => s.company.onboarded);
+  const status = useSession((s) => s.status);
+  useEffect(() => {
+    void initSession();
+  }, []);
+  if (status === "loading") return <Splash text="Ładowanie…" />;
+  if (status === "anon") return <Login />;
+  if (status === "syncing") return <Splash text="Wczytywanie Twoich danych…" />;
   if (!onboarded)
     return (
       <Routes>
@@ -60,6 +80,7 @@ export default function App() {
         <Route path="wiedza" element={<Knowledge />} />
         <Route path="wiedza/:id" element={<Knowledge />} />
         <Route path="ustawienia" element={<Settings />} />
+        <Route path="import" element={<Import />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
