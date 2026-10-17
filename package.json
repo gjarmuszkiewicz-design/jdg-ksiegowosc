@@ -23,6 +23,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.6",
     "recharts": "^2.15.4",
+    "tsx": "^4.23.15",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
@@ -36,7 +37,6 @@
     "concurrently": "^10.0.6",
     "postcss": "^8.5.30",
     "tailwindcss": "^3.4.19",
-    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^6.4.4",
     "vitest": "^3.2.7"

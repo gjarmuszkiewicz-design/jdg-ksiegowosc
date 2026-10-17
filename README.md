@@ -33,6 +33,19 @@ Produkcja: `npm run build && npm start` (serwer Express serwuje zbudowany front 
 
 Testy obliczeń: `npm test`. Kontrola typów: `npm run typecheck`.
 
+## Wdrożenie na Railway (wersja próbna)
+
+1. Na railway.com: **New Project → Deploy from GitHub repo** i wybierz repozytorium (jeśli aplikacja leży w podkatalogu, ustaw *Root Directory* na `jdg-app`).
+2. Railway zbuduje obraz z `Dockerfile` (konfiguracja w `railway.json`, healthcheck `/api/health`).
+3. W zakładce **Variables** ustaw:
+   - `APP_PASSWORD` — hasło do strony (zalecane, żeby nikt obcy nie korzystał z klucza AI),
+   - `ANTHROPIC_API_KEY` — włącza asystenta AI (bez niego działa tryb bazy wiedzy),
+   - opcjonalnie `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` — wysyłka faktur e-mailem.
+   `PORT` ustawia Railway sam.
+4. **Settings → Networking → Generate Domain** — dostaniesz adres `https://…up.railway.app`.
+
+Dane w wersji próbnej są zapisywane w przeglądarce każdego użytkownika (kopia zapasowa w Ustawieniach).
+
 ## Architektura
 
 - `src/` — React 18 + TypeScript + Tailwind, wykresy Recharts, stan w Zustand (zapisywany w przeglądarce).

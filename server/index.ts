@@ -18,6 +18,20 @@ const hasAi = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROP
 const hasSmtp = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
 
 const app = express();
+app.disable("x-powered-by");
+
+// Wersja próbna online: opcjonalne hasło (HTTP Basic), żeby obcy nie korzystali z klucza AI
+const APP_PASSWORD = process.env.APP_PASSWORD;
+if (APP_PASSWORD) {
+  app.use((req, res, next) => {
+    if (req.path === "/api/health") return next();
+    const [scheme, encoded] = (req.headers.authorization || "").split(" ");
+    const password = scheme === "Basic" && encoded ? Buffer.from(encoded, "base64").toString().split(":").slice(1).join(":") : "";
+    if (password === APP_PASSWORD) return next();
+    res.set("WWW-Authenticate", 'Basic realm="Ksiegowosc JDG", charset="UTF-8"').status(401).send("Wymagane hasło");
+  });
+}
+
 app.use(express.json({ limit: "5mb" }));
 
 app.get("/api/health", (_req, res) => {
