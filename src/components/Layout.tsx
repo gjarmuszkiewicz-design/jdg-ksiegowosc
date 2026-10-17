@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import {
-  BarChart3, BookOpen, BookText, Building2, CloudUpload, FilePlus2, FileText, Landmark, LayoutDashboard,
+  BarChart3, BookOpen, Calculator, Car, GraduationCap, BookText, Building2, CloudUpload, FilePlus2, FileText, Landmark, LayoutDashboard,
   Menu, Percent, PiggyBank, Receipt, Settings, ShieldCheck, Sparkles, Users, Wallet, X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -16,7 +16,13 @@ interface NavItem {
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
-  { section: "Start", items: [{ to: "/", label: "Pulpit", icon: <LayoutDashboard />, end: true }] },
+  {
+    section: "Start",
+    items: [
+      { to: "/", label: "Pulpit", icon: <LayoutDashboard />, end: true },
+      { to: "/podatki", label: "Mój miesiąc: podatki", icon: <Calculator /> },
+    ],
+  },
   {
     section: "Sprzedaż",
     items: [
@@ -31,6 +37,8 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { to: "/koszty", label: "Koszty i zakupy", icon: <Receipt />, end: true },
       { to: "/koszty/nowy", label: "Dodaj koszt", icon: <Wallet /> },
+      { to: "/srodki-trwale", label: "Środki trwałe", icon: <Car /> },
+      { to: "/koszty/poradnik", label: "Poradnik kosztów", icon: <GraduationCap /> },
     ],
   },
   {

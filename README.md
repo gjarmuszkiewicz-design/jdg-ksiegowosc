@@ -12,6 +12,9 @@ Prowadzi użytkownika za rękę: podpowiada kolejne kroki, pilnuje terminów, li
 | KSeF | generowanie e-faktur FA(3), wysyłka (tryb symulacji / live), pobieranie faktur zakupowych i księgowanie ich jako koszty |
 | Wydatki | koszty z kategoriami, automatyczne 50% VAT / 75% KUP dla samochodu, podgląd wpływu kosztu na podatek |
 | Rozliczenia | VAT miesięczny + plik **JPK_V7M**, zaliczki PIT (skala / liniowy / ryczałt), ZUS (ulga na start, preferencyjny, Mały ZUS Plus, pełny) ze składką zdrowotną 2026, KPiR / ewidencja przychodów |
+| Mój miesiąc | centrum podatkowe: ile i kiedy zapłacisz, rozpisanie obliczeń PIT / zdrowotnej / ZUS / VAT krok po kroku, stawka krańcowa, porady, symulacja przyszłego miesiąca, plan miesiąca, ile odkładać z każdej faktury |
+| Środki trwałe | ewidencja z amortyzacją liniową, degresywną, jednorazową (de minimis) i niskocenną, limity aut 150/100/225 tys. zł, plan amortyzacji, likwidacja; odpisy trafiają do kosztów i KPiR |
+| Poradnik kosztów | zasady, zapominane koszty, czego nie wolno, strategie optymalizacji, kalkulator wpływu kosztu na podatek |
 | Analizy | raporty i wykresy, porównanie form opodatkowania, pomysły na legalną optymalizację |
 | Pomoc | asystent AI (Claude, z wyszukiwaniem w sieci), baza wiedzy |
 
@@ -41,4 +44,4 @@ Testy obliczeń: `npm test`. Kontrola typów: `npm run typecheck`.
 - Dane są przechowywane lokalnie w przeglądarce (z kopią zapasową JSON) — docelowo baza danych i konta użytkowników.
 - KSeF działa domyślnie w **trybie symulacji**. Klient API KSeF 2.0 (`server/ksef.ts`) trzeba zweryfikować na środowisku testowym MF (miejsca oznaczone `WERYFIKUJ`) przed włączeniem `KSEF_MODE=live`.
 - Plik JPK_V7M jest generowany do pobrania; podpis i wysyłkę robi się np. w e-mikrofirmie lub Kliencie JPK. Przed wysyłką warto sprawdzić plik walidatorem MF.
-- Obliczenia są uproszczone (m.in. brak amortyzacji środków trwałych, korekt faktur, świąt w terminach) — mają charakter pomocniczy.
+- Obliczenia są pomocnicze: brak korekt faktur, świąt w terminach, sprzedaży środków trwałych z zyskiem/stratą i kursów walut.

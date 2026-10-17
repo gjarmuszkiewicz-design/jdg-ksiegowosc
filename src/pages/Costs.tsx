@@ -1,16 +1,67 @@
 import { Download, Pencil, Plus, Receipt, Search, Trash2, Wallet, Percent, TrendingDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Badge, Button, Card, EmptyState, Modal, PageHeader, Stat, Tip } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Hint, Modal, PageHeader, Stat, Tip } from "@/components/ui";
 import { COST_CATEGORIES, categoryEmoji, categoryLabel } from "@/lib/costs";
 import { num2, pln, round2 } from "@/lib/money";
 import { costDeductibleVat, costKup, monthKey, monthLabel } from "@/lib/tax";
 import { downloadFile } from "@/lib/xml";
 import { useStore } from "@/store/useStore";
 import type { Cost } from "@/lib/types";
+import { BookOpen, Landmark } from "lucide-react";
+import { costChecklist } from "@/lib/costGuide";
+import { marginalRates } from "@/lib/explain";
+import { currentYear, useYearData, useYearSummary } from "@/lib/hooks";
+
+
+function CostTaxPanel() {
+  const data = useYearData();
+  const summary = useYearSummary(currentYear());
+  const s = summary[new Date().getMonth()];
+  const mr = useMemo(() => marginalRates(data, s), [data, s]);
+  const missing = useMemo(() => costChecklist(data.costs, data.company).slice(0, 3), [data.costs, data.company]);
+  const isRycz = data.company.taxForm === "ryczalt";
+  return (
+    <Card className="mb-6 overflow-hidden">
+      <div className="grid lg:grid-cols-3">
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white">
+          <div className="text-sm font-medium text-white/80">Twoje koszty a podatek</div>
+          {isRycz ? (
+            <div className="mt-2 text-lg font-semibold">Na ryczałcie koszty nie obniżają podatku ani zdrowotnej</div>
+          ) : (
+            <>
+              <div className="mt-1 text-3xl font-bold">{pln(100 * mr.total)}</div>
+              <div className="text-sm text-white/85">mniej podatku i zdrowotnej z każdych 100 zł kosztu netto ({(mr.total * 100).toFixed(1)}%)</div>
+            </>
+          )}
+        </div>
+        <div className="space-y-1.5 p-5 text-sm">
+          <div className="font-semibold text-slate-900">Ten miesiąc ({monthLabel(s.month)})</div>
+          <div className="flex justify-between"><span className="text-slate-500">Koszty z dokumentów</span><b>{pln(s.kupDocs)}</b></div>
+          <div className="flex justify-between"><span className="text-slate-500">Amortyzacja</span><b>{pln(s.depreciation)}</b></div>
+          <div className="flex justify-between border-t border-slate-100 pt-1.5"><span className="text-slate-500">Szacowana oszczędność</span><b className="text-emerald-600">≈ {pln(round2(s.kup * mr.total))}</b></div>
+          <p className="pt-1 text-xs text-slate-400">{mr.explanation}</p>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-slate-100 p-5 lg:border-l lg:border-t-0">
+          {missing.map((x) => (
+            <div key={x.category} className="text-sm text-slate-600">
+              {categoryEmoji(x.category)} Brak kosztów: <b>{categoryLabel(x.category)}</b> — {x.hint}
+            </div>
+          ))}
+          <div className="mt-auto flex flex-wrap gap-2 pt-2">
+            <Button size="sm" variant="secondary" to="/koszty/poradnik" icon={<BookOpen className="h-4 w-4" />}>Poradnik kosztów</Button>
+            <Button size="sm" variant="secondary" to="/podatki" icon={<Landmark className="h-4 w-4" />}>Centrum podatkowe</Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 export default function Costs() {
-  const { costs, company, deleteCost } = useStore();
+  const { costs, company, deleteCost, assets } = useStore();
+  const linkedIds = useMemo(() => new Set(assets.map((a) => a.costId).filter(Boolean) as string[]), [assets]);
+  const kupOf = (c: (typeof costs)[number]) => (linkedIds.has(c.id) ? 0 : costKup(c, company));
   const [month, setMonth] = useState("");
   const [category, setCategory] = useState("");
   const [q, setQ] = useState("");
@@ -31,16 +82,17 @@ export default function Costs() {
     () => ({
       net: round2(filtered.reduce((s, c) => s + c.net, 0)),
       vat: round2(filtered.reduce((s, c) => s + costDeductibleVat(c, company), 0)),
-      kup: round2(filtered.reduce((s, c) => s + costKup(c, company), 0)),
+      kup: round2(filtered.reduce((s, c) => s + kupOf(c), 0)),
     }),
-    [filtered, company],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered, company, linkedIds],
   );
 
   const exportCsv = () => {
     const head = ["Data", "Nr dokumentu", "Dostawca", "NIP", "Opis", "Kategoria", "Netto", "Stawka VAT", "VAT", "Brutto", "VAT do odliczenia", "KUP", "Opłacony"];
     const rows = filtered.map((c) => [
       c.date, c.docNumber, c.supplierName, c.supplierNip, c.description, categoryLabel(c.category),
-      num2(c.net), c.vatRate, num2(c.vat), num2(c.net + c.vat), num2(costDeductibleVat(c, company)), num2(costKup(c, company)), c.paid ? "tak" : "nie",
+      num2(c.net), c.vatRate, num2(c.vat), num2(c.net + c.vat), num2(costDeductibleVat(c, company)), num2(kupOf(c)), c.paid ? "tak" : "nie",
     ]);
     const csv = [head, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     downloadFile(`koszty${month ? "-" + month : ""}.csv`, "﻿" + csv, "text/csv");
@@ -62,6 +114,8 @@ export default function Costs() {
           </>
         }
       />
+
+      <CostTaxPanel />
 
       {company.taxForm === "ryczalt" && (
         <div className="mb-6">
@@ -125,6 +179,7 @@ export default function Costs() {
                   <th className="table-head text-right">Netto</th>
                   <th className="table-head text-right">VAT</th>
                   <th className="table-head text-right">Brutto</th>
+                  <th className="table-head text-right">KUP</th>
                   <th className="table-head">Status</th>
                   <th className="table-head" />
                 </tr>
@@ -154,10 +209,27 @@ export default function Costs() {
                       {c.vatDeduction === "polowa" && <div className="text-[11px] text-amber-600">odl. 50%</div>}
                     </td>
                     <td className="table-cell text-right font-semibold">{num2(c.net + c.vat)}</td>
+                    <td className="table-cell text-right text-slate-600">
+                      {linkedIds.has(c.id) ? (
+                        <span className="inline-flex items-center gap-1">
+                          0,00 <Hint text="Rozliczane przez odpisy amortyzacyjne w ewidencji środków trwałych." />
+                        </span>
+                      ) : company.taxForm === "ryczalt" ? (
+                        "—"
+                      ) : (
+                        num2(costKup(c, company))
+                      )}
+                    </td>
                     <td className="table-cell">
                       <div className="flex flex-wrap gap-1">
                         {c.paid ? <Badge tone="green">opłacony</Badge> : <Badge tone="amber">do zapłaty</Badge>}
-                        {c.isFixedAsset && <Badge tone="violet">ŚT</Badge>}
+                        {linkedIds.has(c.id) ? (
+                          <Link to="/srodki-trwale">
+                            <Badge tone="violet">amortyzacja</Badge>
+                          </Link>
+                        ) : (
+                          c.isFixedAsset && <Badge tone="violet">ŚT</Badge>
+                        )}
                         {c.ksefNumber && <Badge tone="blue">KSeF</Badge>}
                       </div>
                     </td>

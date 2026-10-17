@@ -163,6 +163,49 @@ export const ARTICLES: Article[] = [
       "Składki ZUS płacisz jednym przelewem na swój numer rachunku składkowego (NRS) — znajdziesz go w PUE/eZUS.",
     ],
   },
+  {
+    id: "amortyzacja",
+    category: "Koszty",
+    title: "Amortyzacja środków trwałych",
+    summary: "Kiedy zakup trzeba amortyzować, jakie są metody i stawki.",
+    tags: ["amortyzacja", "środek trwały", "kśt", "de minimis", "jednorazowa", "degresywna", "odpis"],
+    body: [
+      "Środek trwały to rzecz kompletna, zdatna do użytku i używana dłużej niż rok. Jeśli jej wartość początkowa przekracza 10 000 zł netto, wprowadzasz ją do ewidencji i rozliczasz w kosztach przez odpisy amortyzacyjne. Tańsze rzeczy możesz zaliczyć w koszty jednorazowo.",
+      "Odpisy zaczynasz od miesiąca następującego po miesiącu wprowadzenia środka do ewidencji. Kończysz, gdy suma odpisów zrówna się z wartością początkową albo w miesiącu sprzedaży lub likwidacji.",
+      "Metoda liniowa: co roku ten sam procent wartości początkowej (np. komputery 30%, wyposażenie 20%, samochody 20%, maszyny 14%, budynki niemieszkalne 2,5%, licencje na oprogramowanie 50%). Metoda degresywna: podwójna stawka liczona od wartości netto, z przejściem na liniową, gdy da niższy odpis — tylko dla grup 3–6 i 8 KŚT.",
+      "Jednorazowa amortyzacja w ramach pomocy de minimis: środki z grup 3–8 KŚT (bez samochodów osobowych) do równowartości 100 000 EUR rocznie — dla małych podatników i w roku rozpoczęcia działalności. Całą wartość ujmujesz w koszty od razu.",
+      "Samochody osobowe: odpisy są kosztem tylko do limitu wartości — 150 000 zł (spalinowe i hybrydy z emisją poniżej 50 g CO₂/km), 100 000 zł (emisja co najmniej 50 g CO₂/km, dla aut nabytych od 2026 r.) oraz 225 000 zł (elektryczne i wodorowe). Nadwyżka nie jest kosztem.",
+      "Na ryczałcie amortyzacja nie wpływa na podatek. W aplikacji plan odpisów policzysz w zakładce „Środki trwałe”.",
+    ],
+  },
+  {
+    id: "praca-w-domu",
+    category: "Koszty",
+    title: "Praca w domu — koszty mieszkania",
+    summary: "Jak rozliczyć media, czynsz i internet, gdy biuro jest w mieszkaniu.",
+    tags: ["praca w domu", "mieszkanie", "media", "czynsz", "biuro", "home office", "prąd"],
+    body: [
+      "Jeśli prowadzisz firmę w mieszkaniu, możesz zaliczyć do kosztów część wydatków na lokal — proporcjonalnie do powierzchni wykorzystywanej wyłącznie do pracy (np. pokój 12 m² w mieszkaniu 60 m² = 20%).",
+      "Do kosztów w tej proporcji zaliczysz m.in. prąd, ogrzewanie, wodę, czynsz administracyjny, czynsz najmu (gdy mieszkanie wynajmujesz) i odsetki od kredytu hipotecznego. Internet i telefon — według rzeczywistego użytku służbowego.",
+      "Najlepiej wpisz mieszkanie w CEIDG jako miejsce wykonywania działalności i zachowaj prosty dokument z wyliczeniem proporcji (plan mieszkania, metraż).",
+      "Faktury za media są zwykle wystawione na Ciebie prywatnie — to wystarczy do kosztu w podatku dochodowym, ale VAT odliczysz tylko z faktur wystawionych na firmę (z NIP).",
+      "Uwaga: amortyzacja lokali i budynków mieszkalnych nie jest kosztem (od 2023 r.), a przy sprzedaży mieszkania używanego w firmie przychód może być przychodem z działalności. Rozważ to przed wprowadzeniem mieszkania do ewidencji.",
+    ],
+  },
+  {
+    id: "planowanie-podatkow",
+    category: "Optymalizacja",
+    title: "Jak planować podatki miesiąc do miesiąca",
+    summary: "Rezerwa na podatki, terminy, stawka krańcowa i symulacja przyszłego miesiąca.",
+    tags: ["planowanie", "rezerwa", "symulacja", "stawka krańcowa", "płynność", "terminy", "budżet"],
+    body: [
+      "Odkładaj stały procent każdej opłaconej faktury na osobne konto podatkowe. Dla VAT-owca odkładaj cały VAT z faktury plus 20–35% kwoty netto na PIT i ZUS — dokładny procent wyliczy Centrum podatkowe na podstawie Twoich danych.",
+      "Pilnuj terminów: do 20. dnia miesiąca ZUS i zaliczka na PIT, do 25. dnia JPK_V7M i VAT. Podatki liczy się od daty sprzedaży, a nie od zapłaty klienta — nieopłacona faktura i tak generuje podatek.",
+      "Poznaj swoją stawkę krańcową, czyli ile podatku i zdrowotnej zapłacisz od dodatkowej złotówki dochodu (np. liniowy ok. 23%, skala w drugim progu 41%). Tyle samo zaoszczędzisz na każdej złotówce kosztu.",
+      "Planowane zakupy, które i tak są firmie potrzebne, zrób w miesiącu, w którym obniżą podatek najbardziej — ale nigdy nie kupuj tylko dla podatku.",
+      "W Centrum podatkowym zasymulujesz kolejny miesiąc: wpisz spodziewany przychód, koszty i planowany zakup, a zobaczysz, ile podatku, ZUS i VAT zapłacisz i ile zostanie na rękę.",
+    ],
+  },
 ];
 
 const STOPWORDS = new Set(["jak", "czy", "ile", "jaki", "jaka", "jakie", "mam", "mnie", "moje", "się", "dla", "oraz", "albo", "kiedy", "gdzie", "muszę", "można", "co", "to", "jest", "nie", "tak", "przy", "lub"]);

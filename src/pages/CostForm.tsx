@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { ArrowLeft, Calculator, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, CardHeader, Field, PageHeader, Tabs, Tip, Toggle } from "@/components/ui";
 import { PARAMS_2026 as P } from "@/lib/config2026";
 import { COST_CATEGORIES } from "@/lib/costs";
@@ -34,7 +34,7 @@ const emptyCost = (): Cost => ({
 export default function CostForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { costs, company, upsertCost } = useStore();
+  const { costs, company, upsertCost, assets } = useStore();
   const existing = costs.find((c) => c.id === id);
   const [cost, setCost] = useState<Cost>(() => existing ?? emptyCost());
   const [mode, setMode] = useState<"netto" | "brutto">("netto");
@@ -71,9 +71,11 @@ export default function CostForm() {
 
   const fixedAssetWarn = cost.isFixedAsset && cost.net > 10000;
 
-  const save = () => {
+  const linkedAsset = assets.find((a) => a.costId === cost.id);
+
+  const save = (toAsset = false) => {
     upsertCost({ ...cost, ksefNumber: cost.ksefNumber?.trim() || undefined, vatDeduction: exempt ? "brak" : cost.vatDeduction });
-    navigate("/koszty");
+    navigate(toAsset ? `/srodki-trwale/nowy?koszt=${cost.id}` : "/koszty");
   };
 
   return (
@@ -251,10 +253,28 @@ export default function CostForm() {
                 <Toggle checked={cost.isFixedAsset} onChange={(v) => set({ isFixedAsset: v })} label="Środek trwały" hint="Rzecz używana dłużej niż rok. Powyżej 10 000 zł netto wymaga amortyzacji." />
                 <Toggle checked={cost.paid} onChange={(v) => set({ paid: v })} label="Opłacony" />
               </div>
-              {fixedAssetWarn && (
-                <Tip tone="warning" title="Wymaga amortyzacji">
-                  Środek trwały o wartości powyżej 10 000 zł netto nie trafia jednorazowo do kosztów — rozlicza się go odpisami amortyzacyjnymi. VAT odliczysz w całości od razu.
+              {linkedAsset ? (
+                <Tip tone="success" title="Powiązany środek trwały">
+                  Ten koszt rozliczasz odpisami amortyzacyjnymi:{" "}
+                  <Link to={`/srodki-trwale/${linkedAsset.id}`} className="font-semibold text-brand-600 hover:underline">
+                    {linkedAsset.name}
+                  </Link>
+                  . Sama faktura nie trafia drugi raz do kosztów.
                 </Tip>
+              ) : (
+                fixedAssetWarn && (
+                  <Tip
+                    tone="warning"
+                    title="Wymaga amortyzacji"
+                    action={
+                      <Button size="sm" variant="secondary" onClick={() => save(true)} disabled={!cost.net}>
+                        Dodaj do ewidencji środków trwałych
+                      </Button>
+                    }
+                  >
+                    Środek trwały o wartości powyżej 10 000 zł netto nie trafia jednorazowo do kosztów — rozlicza się go odpisami amortyzacyjnymi (albo jednorazową amortyzacją de minimis). VAT odliczysz od razu. Zapisz koszt i dodaj go do ewidencji — odpisy policzymy automatycznie.
+                  </Tip>
+                )
               )}
             </div>
           </Card>
@@ -295,7 +315,7 @@ export default function CostForm() {
               <Button variant="secondary" className="flex-1" onClick={() => navigate("/koszty")}>
                 Anuluj
               </Button>
-              <Button className="flex-1" icon={<Save className="h-4 w-4" />} onClick={save} disabled={!cost.net && !cost.vat}>
+              <Button className="flex-1" icon={<Save className="h-4 w-4" />} onClick={() => save()} disabled={!cost.net && !cost.vat}>
                 Zapisz
               </Button>
             </div>

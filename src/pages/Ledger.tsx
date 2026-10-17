@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Button, Card, CardHeader, EmptyState, Hint, PageHeader, Tip } from "@/components/ui";
 import { currentYear } from "@/lib/hooks";
 import { num2, pln, round2 } from "@/lib/money";
+import { monthlyDepreciation } from "@/lib/assets";
 import { costKup, invoiceRevenue, MONTHS_PL, monthKey } from "@/lib/tax";
 import { downloadFile } from "@/lib/xml";
 import { useStore } from "@/store/useStore";
@@ -28,6 +29,8 @@ export default function Ledger() {
   const company = useStore((s) => s.company);
   const invoices = useStore((s) => s.invoices);
   const costs = useStore((s) => s.costs);
+  const assets = useStore((s) => s.assets);
+  const linkedIds = useMemo(() => new Set(assets.map((a) => a.costId).filter(Boolean) as string[]), [assets]);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(0); // 0 = cały rok
   const isRyczalt = company.taxForm === "ryczalt";
@@ -43,21 +46,33 @@ export default function Ledger() {
     }
     if (!isRyczalt)
       for (const c of costs) {
-        if (!inPeriod(c.date)) continue;
+        if (!inPeriod(c.date) || linkedIds.has(c.id)) continue;
         const kup = costKup(c, company);
         r.push({ date: c.date, doc: c.docNumber, name: c.supplierName, nip: c.supplierNip, desc: c.description, sale: 0, otherRevenue: 0, goods: c.category === "towary" ? kup : 0, side: 0, wages: 0, other: c.category === "towary" ? 0 : kup });
       }
+    if (!isRyczalt)
+      for (let m = 1; m <= 12; m++) {
+        if (month && m !== month) continue;
+        const mk = `${year}-${String(m).padStart(2, "0")}`;
+        const lastDay = `${mk}-${String(new Date(year, m, 0).getDate()).padStart(2, "0")}`;
+        for (const it of monthlyDepreciation(assets, mk).items) {
+          if (!it.deductible) continue;
+          r.push({ date: lastDay, doc: `OT/${it.asset.inventoryNo || "ST"}`, name: "", nip: "", desc: `Odpis amortyzacyjny — ${it.asset.name}`, sale: 0, otherRevenue: 0, goods: 0, side: 0, wages: 0, other: it.deductible });
+        }
+      }
     return r.sort((a, b) => a.date.localeCompare(b.date));
-  }, [invoices, costs, company, year, month, isRyczalt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices, costs, assets, linkedIds, company, year, month, isRyczalt]);
 
   const sum = (k: keyof Row) => round2(rows.reduce((s, r) => s + (r[k] as number), 0));
   const ytdTotals = useMemo(() => {
     const endMonth = month === 0 ? 12 : month;
     const upTo = `${year}-${String(endMonth).padStart(2, "0")}`;
     const rev = invoices.filter((i) => i.status !== "szkic" && (i.saleDate || i.issueDate).startsWith(String(year)) && monthKey(i.saleDate || i.issueDate) <= upTo).reduce((s, i) => s + invoiceRevenue(i), 0);
-    const exp = isRyczalt ? 0 : costs.filter((c) => c.date.startsWith(String(year)) && monthKey(c.date) <= upTo).reduce((s, c) => s + costKup(c, company), 0);
+    let exp = isRyczalt ? 0 : costs.filter((c) => !linkedIds.has(c.id) && c.date.startsWith(String(year)) && monthKey(c.date) <= upTo).reduce((s, c) => s + costKup(c, company), 0);
+    if (!isRyczalt) for (let m = 1; m <= endMonth; m++) exp += monthlyDepreciation(assets, `${year}-${String(m).padStart(2, "0")}`).deductible;
     return { rev: round2(rev), exp: round2(exp) };
-  }, [invoices, costs, company, year, month, isRyczalt]);
+  }, [invoices, costs, assets, linkedIds, company, year, month, isRyczalt]);
 
   const exportCsv = () => {
     const header = isRyczalt
@@ -100,7 +115,7 @@ export default function Ledger() {
       <Tip tone="info">
         {isRyczalt
           ? "Ewidencja przychodów tworzy się automatycznie z wystawionych faktur. Na ryczałcie koszty nie są ewidencjonowane, bo nie wpływają na podatek."
-          : "Księga uzupełnia się automatycznie z faktur sprzedaży i kosztów. Wpisy są w kolejności chronologicznej. Wydatki pokazujemy w wysokości stanowiącej koszt podatkowy (np. 75% przy samochodzie)."}
+          : "Księga uzupełnia się automatycznie z faktur sprzedaży i kosztów. Wpisy są w kolejności chronologicznej. Wydatki pokazujemy w wysokości stanowiącej koszt podatkowy (np. 75% przy samochodzie). Środki trwałe trafiają do księgi przez miesięczne odpisy amortyzacyjne (ostatni dzień miesiąca)."}
       </Tip>
 
       <Card>

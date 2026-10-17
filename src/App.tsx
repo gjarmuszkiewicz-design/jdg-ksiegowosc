@@ -19,6 +19,10 @@ import Knowledge from "./pages/Knowledge";
 import Settings from "./pages/Settings";
 import Onboarding from "./pages/Onboarding";
 import Ksef from "./pages/Ksef";
+import TaxCenter from "./pages/TaxCenter";
+import Assets from "./pages/Assets";
+import AssetForm from "./pages/AssetForm";
+import CostGuide from "./pages/CostGuide";
 
 export default function App() {
   const onboarded = useStore((s) => s.company.onboarded);
@@ -40,6 +44,11 @@ export default function App() {
         <Route path="ksef" element={<Ksef />} />
         <Route path="koszty" element={<Costs />} />
         <Route path="koszty/nowy" element={<CostForm />} />
+        <Route path="koszty/poradnik" element={<CostGuide />} />
+        <Route path="podatki" element={<TaxCenter />} />
+        <Route path="srodki-trwale" element={<Assets />} />
+        <Route path="srodki-trwale/nowy" element={<AssetForm />} />
+        <Route path="srodki-trwale/:id" element={<AssetForm />} />
         <Route path="koszty/:id" element={<CostForm />} />
         <Route path="vat" element={<Vat />} />
         <Route path="pit" element={<Pit />} />

@@ -18,20 +18,26 @@ export default function Reports() {
   const company = useStore((s) => s.company);
   const invoices = useStore((s) => s.invoices);
   const costs = useStore((s) => s.costs);
+  const assets = useStore((s) => s.assets);
   const [year, setYear] = useState(currentYear());
   const summary = useYearSummary(year);
 
   const yInv = useMemo(() => invoices.filter((i) => i.status !== "szkic" && (i.saleDate || i.issueDate).startsWith(String(year))), [invoices, year]);
   const yCost = useMemo(() => costs.filter((c) => c.date.startsWith(String(year))), [costs, year]);
+  const linkedIds = useMemo(() => new Set(assets.map((a) => a.costId).filter(Boolean) as string[]), [assets]);
+  const isRyczalt = company.taxForm === "ryczalt";
 
-  const flow = summary.map((m, i) => ({ name: MONTHS_SHORT[i], Przychody: m.revenue, Koszty: round2(yCost.filter((c) => c.date.startsWith(m.month)).reduce((s, c) => s + costKup(c, company), 0)) }));
+  const flow = summary.map((m, i) => ({ name: MONTHS_SHORT[i], Przychody: m.revenue, Koszty: isRyczalt ? round2(yCost.filter((c) => c.date.startsWith(m.month)).reduce((s, c) => s + costKup(c, company), 0)) : m.kup }));
   const burden = summary.map((m, i) => ({ name: MONTHS_SHORT[i], Podatek: m.pit, "ZUS społ.": m.social, Zdrowotna: m.health, VAT: m.vatDue }));
 
   const byCategory = useMemo(() => {
     const map = new Map<CostCategory, number>();
-    for (const c of yCost) map.set(c.category, round2((map.get(c.category) ?? 0) + c.net));
-    return [...map.entries()].map(([k, v]) => ({ name: categoryLabel(k), value: v })).sort((a, b) => b.value - a.value);
-  }, [yCost]);
+    for (const c of yCost) if (!linkedIds.has(c.id)) map.set(c.category, round2((map.get(c.category) ?? 0) + c.net));
+    const list = [...map.entries()].map(([k, v]) => ({ name: categoryLabel(k), value: v }));
+    const depreciation = round2(summary.reduce((s, m) => s + m.depreciation, 0));
+    if (depreciation > 0) list.push({ name: "Amortyzacja", value: depreciation });
+    return list.sort((a, b) => b.value - a.value);
+  }, [yCost, linkedIds, summary]);
 
   const topClients = useMemo(() => {
     const map = new Map<string, { net: number; count: number }>();
