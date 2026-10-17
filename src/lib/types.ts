@@ -1,0 +1,140 @@
+export type TaxForm = "skala" | "liniowy" | "ryczalt";
+export type VatStatus = "czynny" | "zwolniony";
+export type ZusStage = "ulga_na_start" | "preferencyjny" | "maly_zus_plus" | "pelny";
+export type VatRate = "23" | "8" | "5" | "0" | "zw" | "np";
+export type PaymentMethod = "przelew" | "gotowka" | "karta";
+
+export interface Address {
+  street: string;
+  postalCode: string;
+  city: string;
+  country: string;
+}
+
+export interface Company {
+  onboarded: boolean;
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  name: string;
+  nip: string;
+  regon: string;
+  pkd: string;
+  address: Address;
+  email: string;
+  phone: string;
+  bankName: string;
+  bankAccount: string;
+  taxOfficeCode: string;
+  startDate: string;
+  taxForm: TaxForm;
+  /** Stawka ryczałtu jako ułamek, np. 0.12 */
+  ryczaltRate: number;
+  vatStatus: VatStatus;
+  /** Podstawa prawna zwolnienia z VAT drukowana na fakturze */
+  vatExemptionBasis: string;
+  zusStage: ZusStage;
+  chorobowa: boolean;
+  /** Podstawa wymiaru dla Małego ZUS Plus (wyliczona z dochodu z poprzedniego roku) */
+  malyZusBase: number;
+  invoiceNumberPattern: string;
+  defaultPaymentDays: number;
+  ksefToken: string;
+}
+
+export interface Contractor {
+  id: string;
+  name: string;
+  nip: string;
+  address: Address;
+  email: string;
+  isCompany: boolean;
+  note?: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  name: string;
+  qty: number;
+  unit: string;
+  netPrice: number;
+  vatRate: VatRate;
+}
+
+export type InvoiceStatus = "szkic" | "wystawiona" | "wyslana" | "oplacona";
+export type KsefStatus = "brak" | "w_kolejce" | "wyslana" | "przyjeta" | "odrzucona";
+
+export interface Invoice {
+  id: string;
+  number: string;
+  issueDate: string;
+  saleDate: string;
+  dueDate: string;
+  place: string;
+  paymentMethod: PaymentMethod;
+  buyer: Omit<Contractor, "id"> & { contractorId?: string };
+  items: InvoiceItem[];
+  notes: string;
+  status: InvoiceStatus;
+  paidDate?: string;
+  ksef: { status: KsefStatus; number?: string; sentAt?: string; message?: string };
+  createdAt: string;
+}
+
+export type CostCategory =
+  | "towary"
+  | "uslugi_obce"
+  | "oprogramowanie"
+  | "sprzet"
+  | "biuro"
+  | "telefon_internet"
+  | "samochod"
+  | "paliwo"
+  | "podroze"
+  | "szkolenia"
+  | "ksiegowosc"
+  | "marketing"
+  | "inne";
+
+export type VatDeduction = "pelne" | "polowa" | "brak";
+
+export interface Cost {
+  id: string;
+  docNumber: string;
+  date: string;
+  supplierName: string;
+  supplierNip: string;
+  description: string;
+  category: CostCategory;
+  net: number;
+  vatRate: VatRate;
+  vat: number;
+  vatDeduction: VatDeduction;
+  /** Udział kosztu w KUP (np. 0.75 dla samochodu w użytku mieszanym) */
+  costShare: number;
+  isFixedAsset: boolean;
+  paid: boolean;
+  ksefNumber?: string;
+  createdAt: string;
+}
+
+export interface ZusPayment {
+  id: string;
+  month: string; // YYYY-MM
+  social: number;
+  health: number;
+  paidDate: string;
+}
+
+export interface TaxPayment {
+  id: string;
+  month: string; // YYYY-MM
+  kind: "pit" | "vat";
+  amount: number;
+  paidDate: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
