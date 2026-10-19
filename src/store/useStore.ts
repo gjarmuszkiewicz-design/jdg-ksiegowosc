@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { ChatMessage, Company, Contractor, Cost, FixedAsset, Invoice } from "@/lib/types";
+import type { ChatMessage, Company, Contractor, Cost, FixedAsset, Invoice, Payment } from "@/lib/types";
 import { demoData } from "./demo";
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -40,6 +40,7 @@ interface State {
   invoices: Invoice[];
   costs: Cost[];
   assets: FixedAsset[];
+  payments: Payment[];
   chat: ChatMessage[];
   dismissedTips: string[];
   setCompany: (c: Partial<Company>) => void;
@@ -52,6 +53,8 @@ interface State {
   deleteCost: (id: string) => void;
   upsertAsset: (a: FixedAsset) => void;
   deleteAsset: (id: string) => void;
+  upsertPayment: (p: Payment) => void;
+  deletePayment: (id: string) => void;
   /** Dodaje wiele dokumentów naraz (import) — istniejące o tym samym id są nadpisywane */
   importBatch: (b: { invoices?: Invoice[]; costs?: Cost[]; contractors?: Contractor[]; assets?: FixedAsset[] }) => void;
   setChat: (m: ChatMessage[]) => void;
@@ -71,6 +74,7 @@ export const useStore = create<State>()(
       invoices: [],
       costs: [],
       assets: [],
+      payments: [],
       chat: [],
       dismissedTips: [],
       setCompany: (c) => set((s) => ({ company: { ...s.company, ...c } })),
@@ -83,6 +87,8 @@ export const useStore = create<State>()(
       deleteCost: (id) => set((s) => ({ costs: s.costs.filter((c) => c.id !== id) })),
       upsertAsset: (a) => set((s) => ({ assets: upsert(s.assets, a) })),
       deleteAsset: (id) => set((s) => ({ assets: s.assets.filter((a) => a.id !== id) })),
+      upsertPayment: (p) => set((s) => ({ payments: upsert(s.payments, p) })),
+      deletePayment: (id) => set((s) => ({ payments: s.payments.filter((p) => p.id !== id) })),
       importBatch: (b) =>
         set((s) => {
           const merge = <T extends { id: string }>(list: T[], add?: T[]) => {
@@ -95,7 +101,7 @@ export const useStore = create<State>()(
       setChat: (chat) => set({ chat }),
       dismissTip: (id) => set((s) => ({ dismissedTips: [...s.dismissedTips, id] })),
       loadDemo: () => set(demoData()),
-      resetAll: () => set({ company: emptyCompany, contractors: [], invoices: [], costs: [], assets: [], chat: [], dismissedTips: [] }),
+      resetAll: () => set({ company: emptyCompany, contractors: [], invoices: [], costs: [], assets: [], payments: [], chat: [], dismissedTips: [] }),
     }),
     { name: "jdg-ksiegowosc-v1" },
   ),

@@ -149,20 +149,17 @@ export interface Cost {
   source?: string;
 }
 
-export interface ZusPayment {
-  id: string;
-  month: string; // YYYY-MM
-  social: number;
-  health: number;
-  paidDate: string;
-}
+export type PaymentKind = "pit" | "vat" | "zus_spoleczne" | "zus_zdrowotna" | "odsetki" | "inne";
 
-export interface TaxPayment {
+/** Wpłata do urzędu skarbowego lub ZUS */
+export interface Payment {
   id: string;
-  month: string; // YYYY-MM
-  kind: "pit" | "vat";
+  kind: PaymentKind;
+  /** Okres rozliczeniowy, którego dotyczy wpłata (RRRR-MM) */
+  period: string;
   amount: number;
   paidDate: string;
+  note?: string;
 }
 
 export interface ChatMessage {

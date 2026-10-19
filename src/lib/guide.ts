@@ -3,7 +3,8 @@ import { isOverdue } from "./invoice";
 import { pln } from "./money";
 import { monthKey, monthLabel, prevMonthKey, yearSummary } from "./tax";
 import { isValidIban, isValidNip } from "./validation";
-import type { Company, Contractor, Cost, FixedAsset, Invoice } from "./types";
+import { computeObligations } from "./obligations";
+import type { Company, Contractor, Cost, FixedAsset, Invoice, Payment } from "./types";
 
 export interface GuideStep {
   id: string;
@@ -28,11 +29,17 @@ interface Ctx {
   invoices: Invoice[];
   costs: Cost[];
   assets?: FixedAsset[];
+  payments?: Payment[];
 }
 
 /** Lista „co teraz zrobić” — prowadzenie za rękę */
-export function nextSteps({ company, contractors, invoices, costs }: Ctx, today = new Date()): GuideStep[] {
+export function nextSteps({ company, contractors, invoices, costs, assets, payments }: Ctx, today = new Date()): GuideStep[] {
   const steps: GuideStep[] = [];
+  if (payments) {
+    const ob = computeObligations({ company, invoices, costs, assets }, payments, today);
+    if (ob.overdueTotal > 0)
+      steps.push({ id: "zaleglosci", title: `Zaległe podatki i ZUS: ${pln(ob.overdueTotal)}`, description: `${ob.overdue.length} ${ob.overdue.length === 1 ? "pozycja" : "pozycji"} po terminie. Zapłać je z odsetkami albo oznacz jako zapłacone, jeśli już to zrobiłeś.`, to: "/platnosci", cta: "Zobacz", tone: "danger" });
+  }
   const thisMonth = today.toISOString().slice(0, 7);
   const prevMonth = prevMonthKey(thisMonth);
 
@@ -54,7 +61,8 @@ export function nextSteps({ company, contractors, invoices, costs }: Ctx, today 
   if (overdue.length)
     steps.push({ id: "overdue", title: `${overdue.length} ${overdue.length === 1 ? "faktura po terminie" : "faktury po terminie"}`, description: `Klienci zalegają łącznie z płatnościami. Wyślij przypomnienie lub oznacz jako opłacone.`, to: "/faktury?filtr=po-terminie", cta: "Zobacz", tone: "danger" });
 
-  const ksefPending = invoices.filter((i) => i.status !== "szkic" && i.buyer.isCompany && (i.ksef.status === "brak" || i.ksef.status === "odrzucona"));
+  // KSeF obowiązkowy dla większości firm od 1.04.2026 — starszych faktur nie wysyłamy
+  const ksefPending = invoices.filter((i) => i.status !== "szkic" && i.buyer.isCompany && i.issueDate >= "2026-04-01" && (i.ksef.status === "brak" || i.ksef.status === "odrzucona"));
   if (ksefPending.length)
     steps.push({ id: "ksef", title: `Wyślij ${ksefPending.length} ${ksefPending.length === 1 ? "fakturę" : "faktur"} do KSeF`, description: "Faktury dla firm muszą trafić do KSeF — dopiero wtedy są uznane za wystawione.", to: "/ksef", cta: "Przejdź do KSeF", tone: "warning" });
 

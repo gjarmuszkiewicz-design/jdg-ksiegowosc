@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import {
-  BarChart3, BookOpen, Calculator, Car, CheckCircle2, CloudOff, GraduationCap, Loader2, LogOut, Upload, BookText, Building2, CloudUpload, FilePlus2, FileText, Landmark, LayoutDashboard,
+  Banknote, BarChart3, BookOpen, Calculator, Car, CheckCircle2, CloudOff, GraduationCap, Loader2, LogOut, Upload, BookText, Building2, CloudUpload, FilePlus2, FileText, Landmark, LayoutDashboard,
   Menu, Percent, PiggyBank, Receipt, Settings, ShieldCheck, Sparkles, Users, Wallet, X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -45,6 +45,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Rozliczenia",
     items: [
+      { to: "/platnosci", label: "Płatności i zaległości", icon: <Banknote /> },
       { to: "/vat", label: "VAT i JPK", icon: <Percent /> },
       { to: "/pit", label: "Podatek dochodowy", icon: <Landmark /> },
       { to: "/zus", label: "ZUS", icon: <ShieldCheck /> },

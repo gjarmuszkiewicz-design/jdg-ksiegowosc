@@ -11,7 +11,7 @@ export interface Deadline {
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /** Termin przypadający w weekend przesuwa się na najbliższy dzień roboczy (święta pominięte) */
-function workday(y: number, m: number, d: number) {
+export function workday(y: number, m: number, d: number) {
   const date = new Date(y, m - 1, d);
   while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1);
   return iso(date);

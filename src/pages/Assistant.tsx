@@ -5,10 +5,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Button, Card, Tip } from "@/components/ui";
 import { TAX_FORM_LABELS, ZUS_STAGE_LABELS } from "@/lib/config2026";
 import { upcomingDeadlines } from "@/lib/deadlines";
-import { currentYear, useYearSummary } from "@/lib/hooks";
+import { currentYear, useYearData, useYearSummary } from "@/lib/hooks";
 import { isOverdue } from "@/lib/invoice";
 import { round2 } from "@/lib/money";
 import type { ChatMessage } from "@/lib/types";
+import { computeObligations, PAYMENT_KIND_LABELS } from "@/lib/obligations";
 import { useStore } from "@/store/useStore";
 
 const SUGGESTIONS = [
@@ -127,6 +128,9 @@ export default function Assistant() {
   const [params, setParams] = useSearchParams();
   const autoSent = useRef(false);
 
+  const payments = useStore((s) => s.payments);
+  const yearData = useYearData();
+  const obligations = useMemo(() => computeObligations(yearData, payments), [yearData, payments]);
   const context = useMemo(() => {
     const monthIdx = new Date().getMonth();
     const ytd = summary[monthIdx];
@@ -156,9 +160,10 @@ export default function Assistant() {
       })),
       liczbaFaktur: invoices.length,
       fakturyPoTerminie: invoices.filter((i) => isOverdue(i)).length,
+      zaleglosciPodatkoweIZus: obligations.overdue.map((o) => `${o.period} ${PAYMENT_KIND_LABELS[o.kind]}: ${o.remaining} zł (termin ${o.dueDate}, ${o.daysLate} dni po terminie)`),
       nadchodzaceTerminy: upcomingDeadlines(company, new Date(), 5).map((d) => `${d.date}: ${d.title} — ${d.description}`),
     };
-  }, [company, invoices, summary, year]);
+  }, [company, invoices, summary, year, obligations]);
 
   useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
 

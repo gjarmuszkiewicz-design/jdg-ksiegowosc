@@ -173,7 +173,7 @@ export default function Import() {
     try {
       const data = JSON.parse(backupFile.text);
       if (!data.company || !Array.isArray(data.invoices)) throw new Error();
-      useStore.setState({ company: data.company, contractors: data.contractors ?? [], invoices: data.invoices, costs: data.costs ?? [], assets: data.assets ?? [] });
+      useStore.setState({ company: data.company, contractors: data.contractors ?? [], invoices: data.invoices, costs: data.costs ?? [], assets: data.assets ?? [], payments: data.payments ?? [] });
       setBackupMsg("Kopia przywrócona.");
       setFiles((f) => f.filter((x) => x !== backupFile));
     } catch {

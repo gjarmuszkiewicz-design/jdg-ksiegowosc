@@ -21,14 +21,14 @@ const toneStyles = {
 const kindColors: Record<string, string> = { zus: "bg-emerald-500", pit: "bg-brand-500", vat: "bg-violet-500", roczne: "bg-rose-500", inne: "bg-amber-500" };
 
 export default function Dashboard() {
-  const { company, contractors, invoices, costs, assets, dismissedTips, dismissTip } = useStore();
+  const { company, contractors, invoices, costs, assets, payments, dismissedTips, dismissTip } = useStore();
   const year = currentYear();
   const summary = useYearSummary(year);
   const m = new Date().getMonth();
   const cur = summary[m];
   const prev = m > 0 ? summary[m - 1] : undefined;
 
-  const steps = useMemo(() => nextSteps({ company, contractors, invoices, costs }), [company, contractors, invoices, costs]);
+  const steps = useMemo(() => nextSteps({ company, contractors, invoices, costs, assets, payments }), [company, contractors, invoices, costs, assets, payments]);
   const tips = useMemo(() => insights({ company, contractors, invoices, costs, assets }).filter((t) => !dismissedTips.includes(t.id)), [company, contractors, invoices, costs, assets, dismissedTips]);
   const deadlines = useMemo(() => upcomingDeadlines(company), [company]);
 

@@ -42,7 +42,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 /** Część stanu zapisywana na serwerze */
 const snapshot = () => {
   const s = useStore.getState();
-  return { company: s.company, contractors: s.contractors, invoices: s.invoices, costs: s.costs, assets: s.assets, chat: s.chat, dismissedTips: s.dismissedTips };
+  return { company: s.company, contractors: s.contractors, invoices: s.invoices, costs: s.costs, assets: s.assets, payments: s.payments, chat: s.chat, dismissedTips: s.dismissedTips };
 };
 
 let unsubscribe: (() => void) | null = null;
