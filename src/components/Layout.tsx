@@ -123,6 +123,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         >
           <Settings className="h-[18px] w-[18px]" /> Ustawienia firmy
         </NavLink>
+        <div className="px-3 pt-2 text-[11px] text-slate-500">Wersja {__APP_VERSION__} UTC</div>
       </div>
     </div>
   );
