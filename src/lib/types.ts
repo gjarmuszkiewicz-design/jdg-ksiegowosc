@@ -143,6 +143,8 @@ export interface Cost {
   isFixedAsset: boolean;
   paid: boolean;
   ksefNumber?: string;
+  /** Data, od której liczymy odliczenie VAT (np. data wpływu), gdy inna niż data kosztu w KPiR */
+  vatDate?: string;
   createdAt: string;
   source?: string;
 }

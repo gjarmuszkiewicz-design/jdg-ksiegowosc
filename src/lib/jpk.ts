@@ -28,7 +28,7 @@ export interface JpkResult {
 export function buildJpkV7M(company: Company, invoices: Invoice[], costs: Cost[], month: string, carryFromPrev = 0): JpkResult {
   const [year, m] = month.split("-");
   const sales = invoices.filter((i) => i.status !== "szkic" && monthKey(i.saleDate || i.issueDate) === month);
-  const purchases = costs.filter((c) => monthKey(c.date) === month && costDeductibleVat(c, company) > 0);
+  const purchases = costs.filter((c) => monthKey(c.vatDate || c.date) === month && costDeductibleVat(c, company) !== 0);
 
   const P: Record<string, number> = {};
   const add = (k: string, v: number) => (P[k] = Math.round(((P[k] ?? 0) + v) * 100) / 100);
@@ -57,7 +57,7 @@ export function buildJpkV7M(company: Company, invoices: Invoice[], costs: Cost[]
     add(kVat.replace("K_", "P_"), vat);
     purchaseNet += net;
     purchaseVat += vat;
-    return `<tns:ZakupWiersz>${tag("tns:LpZakupu", idx + 1)}${tag("tns:KodKrajuNadaniaTIN", "PL")}${tag("tns:NrDostawcy", cleanNip(c.supplierNip) || "brak")}${tag("tns:NazwaDostawcy", c.supplierName)}${tag("tns:DowodZakupu", c.docNumber)}${tag("tns:DataZakupu", c.date)}${tag("tns:DataWplywu", c.date)}${c.ksefNumber ? tag("tns:NrKSeF", c.ksefNumber) : tag("tns:BFK", 1)}${tag(`tns:${kNet}`, amt(net))}${tag(`tns:${kVat}`, amt(vat))}</tns:ZakupWiersz>`;
+    return `<tns:ZakupWiersz>${tag("tns:LpZakupu", idx + 1)}${tag("tns:KodKrajuNadaniaTIN", "PL")}${tag("tns:NrDostawcy", cleanNip(c.supplierNip) || "brak")}${tag("tns:NazwaDostawcy", c.supplierName)}${tag("tns:DowodZakupu", c.docNumber)}${tag("tns:DataZakupu", c.date)}${tag("tns:DataWplywu", c.vatDate || c.date)}${c.ksefNumber ? tag("tns:NrKSeF", c.ksefNumber) : tag("tns:BFK", 1)}${tag(`tns:${kNet}`, amt(net))}${tag(`tns:${kVat}`, amt(vat))}</tns:ZakupWiersz>`;
   });
 
   const salesNet = ["K_10", "K_11", "K_13", "K_15", "K_17", "K_19"].reduce((s, k) => s + (P[k] ?? 0), 0);

@@ -96,12 +96,13 @@ function makeInvoice(p: { number: string; issueDate: string; saleDate?: string; 
   };
 }
 
-function makeCost(p: { docNumber: string; date: string; supplierName: string; supplierNip: string; description?: string; net: number; vat: number; vatRate?: VatRate; isFixedAsset?: boolean; ksefNumber?: string; source: string }): Cost {
+function makeCost(p: { docNumber: string; date: string; vatDate?: string; supplierName: string; supplierNip: string; description?: string; net: number; vat: number; vatRate?: VatRate; isFixedAsset?: boolean; ksefNumber?: string; source: string }): Cost {
   const g = guessCategory(p.supplierName, p.description ?? "");
   return {
     id: uid(),
     docNumber: p.docNumber || "bez numeru",
     date: p.date,
+    vatDate: p.vatDate && p.vatDate !== p.date ? p.vatDate : undefined,
     supplierName: p.supplierName || "Dostawca",
     supplierNip: cleanNip(p.supplierNip),
     description: p.description || p.supplierName || "Zakup",
@@ -141,7 +142,7 @@ const CATEGORY_RULES: { re: RegExp; category: CostCategory; vatDeduction?: VatDe
   { re: /ifirma|wfirma|biuro rachunkowe|księgow|ksiegow/, category: "ksiegowosc" },
   { re: /\bpkp\b|\blot\b|ryanair|wizz|uber|bolt|hotel|booking/, category: "podroze" },
   { re: /udemy|coursera|szkoleni|konferencj/, category: "szkolenia" },
-  { re: /leasing|ubezp|serwis|opony|warsztat/, category: "samochod", vatDeduction: "polowa", costShare: 0.75 },
+  { re: /leasing samoch|leasing aut|ubezp\S* (oc|ac|komunik)|serwis (samoch|aut)|autoserwis|opony|wulkaniz|warsztat samoch|mechanik/, category: "samochod", vatDeduction: "polowa", costShare: 0.75 },
   { re: /allegro/, category: "inne" },
 ];
 
@@ -226,7 +227,9 @@ export function parseJpkV7(xml: string, _company?: Company): ImportResult {
     const otherVat = num(txt(w, "K_43"));
     const base = {
       docNumber: txt(w, "DowodZakupu"),
-      date: txt(w, "DataWplywu") || txt(w, "DataZakupu"),
+      // koszt (PIT/KPiR) wg daty wystawienia, odliczenie VAT wg daty wpływu
+      date: txt(w, "DataZakupu") || txt(w, "DataWplywu"),
+      vatDate: txt(w, "DataWplywu") || undefined,
       supplierName: txt(w, "NazwaDostawcy"),
       supplierNip: txt(w, "NrDostawcy").replace(/^brak$/i, ""),
       ksefNumber: txt(w, "NrKSeF") || undefined,
@@ -239,7 +242,7 @@ export function parseJpkV7(xml: string, _company?: Company): ImportResult {
     for (const [field, label] of VAT_CORRECTIONS) {
       const vat = num(txt(w, field));
       if (!vat) continue;
-      const c = makeCost({ ...base, docNumber: `KOREKTA ${field} ${base.docNumber}`, description: `${label} — dot. ${base.docNumber}`, net: 0, vat, vatRate: "23" });
+      const c = makeCost({ ...base, date: base.vatDate || base.date, vatDate: undefined, docNumber: `KOREKTA ${field} ${base.docNumber}`, description: `${label} — dot. ${base.docNumber}`, net: 0, vat, vatRate: "23" });
       costs.push({ ...c, category: "inne", vatDeduction: "pelne", costShare: 1, ksefNumber: undefined });
       corrections++;
     }

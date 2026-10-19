@@ -49,7 +49,7 @@ describe("importery", () => {
     expect(r.invoices[1].items).toHaveLength(2);
     expect(r.invoices[1].items.find((i) => i.vatRate === "8")?.netPrice).toBe(500);
     expect(r.costs).toHaveLength(1);
-    expect(r.costs[0]).toMatchObject({ net: 400, vat: 46, date: "2026-03-19", category: "paliwo" });
+    expect(r.costs[0]).toMatchObject({ net: 400, vat: 46, date: "2026-03-18", vatDate: "2026-03-19", category: "paliwo" });
     expect(r.contractors).toHaveLength(2);
     expect(r.source).toBe("JPK_V7M 2026-03");
   });

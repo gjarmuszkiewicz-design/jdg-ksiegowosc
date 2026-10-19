@@ -169,6 +169,8 @@ export function yearSummary({ company, invoices, costs, assets = [] }: YearData,
     }
     const mInv = beforeOpening ? [] : invoices.filter((i) => booked(i) && monthKey(i.saleDate || i.issueDate) === mk);
     const mCost = beforeOpening ? [] : costs.filter((c) => monthKey(c.date) === mk);
+    // VAT naliczony wg miesiąca odliczenia (data wpływu), koszty PIT wg daty dokumentu
+    const mVatCost = beforeOpening ? [] : costs.filter((c) => monthKey(c.vatDate || c.date) === mk);
 
     const revenue = round2(mInv.reduce((s, i) => s + invoiceRevenue(i), 0));
     const isRycz = company.taxForm === "ryczalt";
@@ -185,7 +187,7 @@ export function yearSummary({ company, invoices, costs, assets = [] }: YearData,
         e.vat = round2(e.vat + r.vat);
       }
     const vatOut = company.vatStatus === "czynny" ? round2(Object.values(vatByRate).reduce((s, r) => s + r.vat, 0)) : 0;
-    const vatIn = company.vatStatus === "czynny" ? round2(mCost.reduce((s, c) => s + costDeductibleVat(c, company), 0)) : 0;
+    const vatIn = company.vatStatus === "czynny" ? round2(mVatCost.reduce((s, c) => s + costDeductibleVat(c, company), 0)) : 0;
     const vatBalance = Math.round(vatOut) - Math.round(vatIn) - Math.round(vatCarry);
     const vatDue = Math.max(0, vatBalance);
     vatCarry = vatBalance < 0 ? -vatBalance : 0;
