@@ -20,6 +20,9 @@ const KSEF_ENV = (["test", "demo", "prod"].includes(process.env.KSEF_ENV || "") 
 const hasAi = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 const hasSmtp = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
 
+// Czas uruchomienia serwera — pozwala sprawdzić z zewnątrz, czy działa najnowsze wdrożenie
+const BUILD_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) || new Date().toISOString();
+
 const app = express();
 app.disable("x-powered-by");
 
@@ -50,7 +53,7 @@ app.put("/api/state", async (req: AuthedRequest, res, next) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, storage: storage.kind, ai: hasAi(), smtp: hasSmtp(), ksefMode: KSEF_MODE, ksefEnv: KSEF_ENV, model: MODEL });
+  res.json({ ok: true, version: BUILD_VERSION, storage: storage.kind, ai: hasAi(), smtp: hasSmtp(), ksefMode: KSEF_MODE, ksefEnv: KSEF_ENV, model: MODEL });
 });
 
 // ───────────────────────── Asystent AI ─────────────────────────
