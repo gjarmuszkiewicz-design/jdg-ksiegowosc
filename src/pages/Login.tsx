@@ -96,6 +96,17 @@ export default function Login() {
             </Button>
           </form>
 
+          {!isRegister && (
+            <details className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+              <summary className="cursor-pointer font-semibold text-brand-600">Nie pamiętasz hasła?</summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>W panelu Railway otwórz usługę aplikacji → <b>Variables</b>.</li>
+                <li>Dodaj <code>RESET_PASSWORD_EMAIL</code> (Twój e-mail z logowania) i <code>RESET_PASSWORD_NEW</code> (nowe hasło, min. 8 znaków).</li>
+                <li>Poczekaj na ponowne uruchomienie i zaloguj się nowym hasłem.</li>
+                <li>Usuń obie zmienne z Railway.</li>
+              </ol>
+            </details>
+          )}
           {registrationOpen && (
             <p className="mt-5 text-center text-sm text-slate-500">
               {isRegister ? "Masz już konto? " : "Nie masz konta? "}

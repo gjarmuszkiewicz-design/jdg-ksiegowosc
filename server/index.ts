@@ -7,7 +7,7 @@ import type { BetaContentBlockParam, BetaMessageParam } from "@anthropic-ai/sdk/
 import nodemailer from "nodemailer";
 import { searchArticles } from "../src/lib/knowledge";
 import { ALLOWED_SEARCH_DOMAINS, checkRateLimit, isOnTopic, LIMITS, OFF_TOPIC_MESSAGE } from "./aiGuard";
-import { authRouter, type AuthedRequest } from "./auth";
+import { authRouter, hashPassword, type AuthedRequest } from "./auth";
 import { createStorage } from "./storage";
 import { KsefClient, simulatePurchases, simulateSend, type KsefEnv } from "./ksef";
 
@@ -300,8 +300,25 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   if (!res.headersSent) res.status(500).json({ ok: false, message: "Błąd serwera." });
 });
 
+/**
+ * Awaryjny reset hasła: ustaw w zmiennych środowiska RESET_PASSWORD_EMAIL i RESET_PASSWORD_NEW,
+ * uruchom ponownie serwer, zaloguj się nowym hasłem i usuń obie zmienne.
+ */
+async function emergencyPasswordReset() {
+  const email = process.env.RESET_PASSWORD_EMAIL?.trim().toLowerCase();
+  const password = process.env.RESET_PASSWORD_NEW;
+  if (!email || !password) return;
+  if (password.length < 8) return console.warn("[reset hasła] RESET_PASSWORD_NEW musi mieć co najmniej 8 znaków — pomijam.");
+  const user = await storage.getUserByEmail(email);
+  if (!user) return console.warn(`[reset hasła] Nie znaleziono konta ${email}. Liczba kont w bazie: ${await storage.countUsers()}.`);
+  await storage.updatePassword(user.id, await hashPassword(password));
+  await storage.deleteUserSessions(user.id);
+  console.log(`[reset hasła] Hasło dla ${email} zostało zmienione. USUŃ teraz zmienne RESET_PASSWORD_EMAIL i RESET_PASSWORD_NEW.`);
+}
+
 storage
   .init()
+  .then(emergencyPasswordReset)
   .then(() =>
     app.listen(PORT, () => {
       console.log(`API Księgowość JDG: http://localhost:${PORT}  (dane: ${storage.kind}, AI: ${hasAi() ? MODEL : "offline"}, KSeF: ${KSEF_MODE}/${KSEF_ENV})`);
