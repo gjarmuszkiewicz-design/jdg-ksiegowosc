@@ -164,6 +164,13 @@ const SALE_K: { net: string; vat?: string; rate: VatRate }[] = [
   { net: "K_12", rate: "np" },
 ];
 
+const VAT_CORRECTIONS: [string, string][] = [
+  ["K_44", "Korekta VAT naliczonego od nabycia środków trwałych"],
+  ["K_45", "Korekta VAT naliczonego od pozostałych nabyć"],
+  ["K_46", "Korekta VAT naliczonego — niezapłacona faktura (art. 89b ust. 1)"],
+  ["K_47", "Korekta VAT naliczonego — zapłata po korekcie (art. 89b ust. 4)"],
+];
+
 export function parseJpkV7(xml: string, _company?: Company): ImportResult {
   const doc = parseXml(xml);
   const kod = first(doc, "KodFormularza")?.getAttribute("kodSystemowy") ?? "JPK_V7";
@@ -211,6 +218,7 @@ export function parseJpkV7(xml: string, _company?: Company): ImportResult {
   if (invoices.length) warnings.push("JPK nie zawiera informacji o płatnościach — faktury oznaczono jako opłacone. Popraw status nieopłaconych ręcznie.");
 
   let hasPurchase = false;
+  let corrections = 0;
   for (const w of all(doc, "ZakupWiersz")) {
     const fixedNet = num(txt(w, "K_40"));
     const fixedVat = num(txt(w, "K_41"));
@@ -226,8 +234,19 @@ export function parseJpkV7(xml: string, _company?: Company): ImportResult {
     };
     if (fixedNet || fixedVat) costs.push(makeCost({ ...base, net: fixedNet, vat: fixedVat, isFixedAsset: true }));
     if (otherNet || otherVat) costs.push(makeCost({ ...base, net: otherNet, vat: otherVat }));
+    // Korekty VAT naliczonego (K_44–K_47): zapisujemy jako osobny dokument z samą kwotą VAT,
+    // z innym numerem, żeby nie został uznany za duplikat faktury, której dotyczy
+    for (const [field, label] of VAT_CORRECTIONS) {
+      const vat = num(txt(w, field));
+      if (!vat) continue;
+      const c = makeCost({ ...base, docNumber: `KOREKTA ${field} ${base.docNumber}`, description: `${label} — dot. ${base.docNumber}`, net: 0, vat, vatRate: "23" });
+      costs.push({ ...c, category: "inne", vatDeduction: "pelne", costShare: 1, ksefNumber: undefined });
+      corrections++;
+    }
     hasPurchase = true;
   }
+  if (corrections)
+    warnings.push(`Zaimportowano ${corrections} korekt VAT naliczonego (np. ulga na złe długi po stronie nabywcy) jako osobne pozycje bez wpływu na koszty podatkowe.`);
   if (hasPurchase)
     warnings.push("W JPK są tylko kwoty VAT już odliczone (np. 50% przy samochodzie). Koszty zaimportowano z pełnym odliczeniem — sprawdź samochód i paliwo. Kwoty netto kosztów wynikają z JPK, a nie z całych faktur.");
 

@@ -66,6 +66,25 @@ export function zusSocial(company: Company): ZusBreakdown {
   return { base, emerytalna, rentowa, chorobowa, wypadkowa, fp, social };
 }
 
+/**
+ * Składki społeczne za dany miesiąc z uwzględnieniem zmiany etapu w trakcie miesiąca
+ * (np. koniec ulgi na start 17.09 → preferencyjny ZUS od 18.09 liczony proporcjonalnie do dni).
+ */
+export function zusSocialForMonth(company: Company, mk: string): number {
+  const periods = [...(company.zusPeriods ?? [])].sort((a, b) => a.from.localeCompare(b.from));
+  if (!periods.length) return zusSocial(company).social;
+  const [y, m] = mk.split("-").map(Number);
+  const days = new Date(y, m, 0).getDate();
+  let total = 0;
+  for (let d = 1; d <= days; d++) {
+    const date = `${mk}-${String(d).padStart(2, "0")}`;
+    const current = periods.filter((p) => p.from <= date).at(-1);
+    if (current) total += zusSocial({ ...company, zusStage: current.stage }).social / days;
+  }
+  // Pierwszy miesiąc działalności: składki liczy się od dnia rozpoczęcia — pętla już to uwzględnia
+  return round2(total);
+}
+
 export function ryczaltHealth(revenueYtd: number) {
   return P.health.ryczaltTiers.find((t) => revenueYtd <= t.upTo)!.amount;
 }
@@ -126,7 +145,6 @@ export function pitFromBase(form: TaxForm, base: number, ryczaltRate: number) {
 
 export function yearSummary({ company, invoices, costs, assets = [] }: YearData, year: number): MonthSummary[] {
   const startMk = company.startDate ? monthKey(company.startDate) : `${year}-01`;
-  const social = zusSocial(company).social;
   const result: MonthSummary[] = [];
   let revenueYtd = 0, kupYtd = 0, socialYtd = 0, healthDedYtd = 0, taxPrevYtd = 0;
   let vatCarry = 0;
@@ -173,8 +191,8 @@ export function yearSummary({ company, invoices, costs, assets = [] }: YearData,
     vatCarry = vatBalance < 0 ? -vatBalance : 0;
 
     // ZUS: składki za miesiąc M płacone do 20. dnia M+1 → odliczane w M+1
-    const monthSocial = active ? social : 0;
-    const socialDeducted = prevActive ? social : 0;
+    const monthSocial = active ? zusSocialForMonth(company, mk) : 0;
+    const socialDeducted = prevActive ? zusSocialForMonth(company, prevMonthKey(mk)) : 0;
 
     revenueYtd = round2(revenueYtd + revenue);
     kupYtd = round2(kupYtd + kup);

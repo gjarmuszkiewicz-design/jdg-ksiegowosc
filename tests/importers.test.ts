@@ -98,3 +98,18 @@ describe("importery", () => {
     expect(guessCategory("Orange Polska").category).toBe("telefon_internet");
   });
 });
+
+describe("JPK_V7 — korekty VAT naliczonego", () => {
+  it("K_46 jako osobna pozycja z ujemnym VAT, nie duplikat oryginalnej faktury", () => {
+    const xml = `<?xml version="1.0"?><tns:JPK xmlns:tns="http://crd.gov.pl/wzor/2025/12/19/14090/"><tns:Naglowek><tns:KodFormularza kodSystemowy="JPK_V7M (3)">JPK_VAT</tns:KodFormularza><tns:Rok>2026</tns:Rok><tns:Miesiac>7</tns:Miesiac></tns:Naglowek><tns:Ewidencja>
+      <tns:ZakupWiersz><tns:NrDostawcy>7831711517</tns:NrDostawcy><tns:NazwaDostawcy>Hosting</tns:NazwaDostawcy><tns:DowodZakupu>6424/4/2026</tns:DowodZakupu><tns:DataZakupu>2026-04-16</tns:DataZakupu><tns:DataWplywu>2026-07-31</tns:DataWplywu><tns:K_46>-12.19</tns:K_46></tns:ZakupWiersz>
+    </tns:Ewidencja></tns:JPK>`;
+    const r = parseJpkV7(xml);
+    expect(r.costs).toHaveLength(1);
+    expect(r.costs[0]).toMatchObject({ net: 0, vat: -12.19, date: "2026-07-31" });
+    expect(r.costs[0].docNumber).toContain("KOREKTA K_46");
+    const original = { ...r.costs[0], id: "x", docNumber: "6424/4/2026", vat: 12.19, net: 53 };
+    const dup = findDuplicates(r, { invoices: [], costs: [original], contractors: [] });
+    expect(dup.costIds.size).toBe(0);
+  });
+});

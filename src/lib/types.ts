@@ -34,6 +34,8 @@ export interface Company {
   /** Podstawa prawna zwolnienia z VAT drukowana na fakturze */
   vatExemptionBasis: string;
   zusStage: ZusStage;
+  /** Historia etapów ZUS (np. ulga na start → preferencyjny). Gdy pusta, cały czas obowiązuje `zusStage`. */
+  zusPeriods?: { stage: ZusStage; from: string }[];
   chorobowa: boolean;
   /** Podstawa wymiaru dla Małego ZUS Plus (wyliczona z dochodu z poprzedniego roku) */
   malyZusBase: number;

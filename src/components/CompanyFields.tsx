@@ -139,6 +139,25 @@ export function ZusFields({ value: c, onChange }: Props) {
       {c.zusStage !== "ulga_na_start" && (
         <Toggle checked={c.chorobowa} onChange={(v) => onChange({ chorobowa: v })} label="Płacę dobrowolną składkę chorobową" hint="Daje prawo do zasiłku chorobowego i macierzyńskiego. Zalecana." />
       )}
+      <div className="rounded-2xl border border-slate-200 p-4">
+        <div className="label">Historia etapów ZUS <span className="font-normal text-slate-400">(opcjonalnie — gdy etap zmienił się w trakcie roku)</span></div>
+        <div className="space-y-2">
+          {(c.zusPeriods ?? []).map((p, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-slate-500">od</span>
+              <input className="input w-44" type="date" value={p.from} onChange={(e) => onChange({ zusPeriods: (c.zusPeriods ?? []).map((x, j) => (j === i ? { ...x, from: e.target.value } : x)) })} />
+              <select className="input w-auto" value={p.stage} onChange={(e) => onChange({ zusPeriods: (c.zusPeriods ?? []).map((x, j) => (j === i ? { ...x, stage: e.target.value as ZusStage } : x)) })}>
+                {Object.entries(ZUS_STAGE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <button type="button" className="text-sm font-medium text-rose-600 hover:underline" onClick={() => onChange({ zusPeriods: (c.zusPeriods ?? []).filter((_, j) => j !== i) })}>usuń</button>
+            </div>
+          ))}
+          <button type="button" className="text-sm font-semibold text-brand-600 hover:underline" onClick={() => onChange({ zusPeriods: [...(c.zusPeriods ?? []), { stage: c.zusStage, from: new Date().toISOString().slice(0, 10) }] })}>
+            + dodaj okres
+          </button>
+          {!!c.zusPeriods?.length && <p className="text-xs text-slate-500">Składki liczymy wg tych okresów (proporcjonalnie do dni przy zmianie w trakcie miesiąca). Ustaw też powyżej etap obowiązujący obecnie.</p>}
+        </div>
+      </div>
       {c.zusStage === "ulga_na_start" && <Tip tone="info">W okresie ulgi na start nie płacisz składek społecznych, więc nie masz ubezpieczenia chorobowego ani wypadkowego.</Tip>}
     </div>
   );

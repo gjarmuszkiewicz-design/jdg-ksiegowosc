@@ -45,12 +45,24 @@ export function invoiceTotals(inv: Pick<Invoice, "items">) {
 
 export function nextInvoiceNumber(pattern: string, invoices: Invoice[], issueDate: string) {
   const [y, m] = issueDate.split("-");
-  const samePeriod = invoices.filter((i) => {
-    const [iy, im] = i.issueDate.split("-");
-    return pattern.includes("{MM}") ? iy === y && im === m : iy === y;
-  });
-  const n = samePeriod.length + 1;
-  return pattern.replace("{NR}", String(n)).replace("{MM}", m).replace("{RRRR}", y);
+  const monthly = pattern.includes("{MM}");
+  const fill = (nr: string) => pattern.replace("{NR}", nr).replace("{MM}", m).replace("{RRRR}", y);
+  // Szukamy najwyższego numeru wg wzoru w tym samym okresie (rok lub miesiąc) — odporne na faktury z innych programów
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^${esc(fill("@@NR@@")).replace("@@NR@@", "(\\d+)")}$`);
+  let max = 0;
+  for (const i of invoices) {
+    const match = i.number.trim().match(re);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  if (!max) {
+    const samePeriod = invoices.filter((i) => {
+      const [iy, im] = i.issueDate.split("-");
+      return monthly ? iy === y && im === m : iy === y;
+    });
+    return fill(String(samePeriod.length + 1));
+  }
+  return fill(String(max + 1));
 }
 
 export const isOverdue = (inv: Invoice, today = new Date().toISOString().slice(0, 10)) =>
