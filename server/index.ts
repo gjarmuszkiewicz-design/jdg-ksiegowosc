@@ -287,7 +287,10 @@ app.post("/api/ksef/send", async (req, res) => {
 app.get("/api/ksef/purchases", (req, res) => {
   const nip = String(req.query.nip || "").replace(/\D/g, "");
   // Pobieranie faktur zakupowych (POST /invoices/query/metadata) — w trybie live do zaimplementowania po weryfikacji API
-  res.json({ mode: KSEF_MODE, items: simulatePurchases(nip) });
+  // Bez prawdziwego połączenia nie pokazujemy przykładowych faktur — łatwo je pomylić z własnymi
+  void simulatePurchases;
+  void nip;
+  res.json({ mode: KSEF_MODE, simulated: true, items: [], message: "Pobieranie faktur z KSeF nie jest jeszcze włączone. Pobierz XML-e z Aplikacji Podatnika KSeF i wgraj je w Import danych." });
 });
 
 // ───────────────────────── Frontend (produkcja) ─────────────────────────

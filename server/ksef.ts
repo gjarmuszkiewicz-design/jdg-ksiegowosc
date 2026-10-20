@@ -27,7 +27,8 @@ export const KSEF_URLS: Record<KsefEnv, string> = {
 
 export interface KsefSendResult {
   ok: boolean;
-  status: "przyjeta" | "w_kolejce" | "odrzucona";
+  status: "przyjeta" | "w_kolejce" | "odrzucona" | "brak";
+  simulated?: boolean;
   ksefNumber?: string;
   referenceNumber?: string;
   message: string;
@@ -154,16 +155,19 @@ export class KsefClient {
   }
 }
 
-const ymd = () => new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
 
 /** Tryb symulacji — odpowiedź w formacie zbliżonym do prawdziwego numeru KSeF */
 export function simulateSend(nip: string): KsefSendResult {
   const hex = (n: number) => crypto.randomBytes(n).toString("hex").toUpperCase();
+  // Symulacja niczego nie wysyła — nie zmieniamy statusu faktury i nie nadajemy zmyślonego numeru KSeF
+  void hex;
+  void nip;
   return {
-    ok: true,
-    status: "przyjeta",
-    ksefNumber: `${nip}-${ymd()}-${hex(6)}-${hex(1)}`,
-    message: "Tryb symulacji — faktura NIE została wysłana do KSeF. Ustaw KSEF_MODE=live i token, aby wysyłać naprawdę.",
+    ok: false,
+    simulated: true,
+    status: "brak",
+    message: "Tryb symulacji — faktura NIE została wysłana do KSeF. Wyślij ją w Aplikacji Podatnika KSeF albo poczekaj na włączenie połączenia z KSeF.",
   };
 }
 

@@ -1,5 +1,5 @@
 import { CheckCircle2, CloudDownload, CloudUpload, Code2, Download, KeyRound, Loader2, Receipt, Send, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Button, Card, CardHeader, EmptyState, Modal, PageHeader, Tip } from "@/components/ui";
 import { invoiceTotals } from "@/lib/invoice";
@@ -38,6 +38,10 @@ export default function Ksef() {
   const [purchases, setPurchases] = useState<PurchaseItem[] | null>(null);
   const [purchLoading, setPurchLoading] = useState(false);
   const [purchError, setPurchError] = useState("");
+  const [ksefMode, setKsefMode] = useState<string>("");
+  useEffect(() => {
+    fetch("/api/health").then((r) => r.json()).then((h) => setKsefMode(h.ksefMode ?? "")).catch(() => undefined);
+  }, []);
 
   const list = useMemo(() => invoices.filter((i) => i.status !== "szkic").sort((a, b) => b.issueDate.localeCompare(a.issueDate)), [invoices]);
   const toSend = list.filter(pending);
@@ -55,6 +59,11 @@ export default function Ksef() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok && !data.status) throw new Error(data.message || `Błąd serwera (${res.status})`);
+      if (data.simulated) {
+        // nic nie zostało wysłane — przywracamy poprzedni status i pokazujemy komunikat
+        updateInvoice(inv.id, { ksef: { ...inv.ksef, message: data.message } });
+        return;
+      }
       updateInvoice(inv.id, {
         ksef: {
           status: (data.status as KsefStatus) ?? (data.ok ? "wyslana" : "odrzucona"),
@@ -81,6 +90,7 @@ export default function Ksef() {
       const res = await fetch(`/api/ksef/purchases?nip=${cleanNip(company.nip)}`, { headers: company.ksefToken ? { "x-ksef-token": company.ksefToken } : {} });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || `Błąd serwera (${res.status})`);
+      if (data.simulated) throw new Error(data.message);
       setPurchases(data.items ?? []);
     } catch (err) {
       setPurchError(err instanceof Error ? err.message : "Nie udało się pobrać faktur.");
@@ -126,6 +136,16 @@ export default function Ksef() {
           </Button>
         }
       />
+
+      {ksefMode === "symulacja" && (
+        <div className="mb-6">
+          <Tip tone="warning" title="Połączenie z KSeF nie jest jeszcze włączone">
+            Aplikacja <b>nie wysyła</b> teraz faktur do KSeF i <b>nie pobiera</b> z niego faktur zakupowych — token jest tylko zapisany. Do czasu włączenia połączenia:
+            wystawiaj i odbieraj faktury w <a className="font-semibold text-brand-600 hover:underline" href="https://ksef.podatki.gov.pl/aplikacja-podatnika-ksef-20/" target="_blank" rel="noreferrer">Aplikacji Podatnika KSeF</a>,
+            a pobrane pliki XML wgrywaj w <Link to="/import" className="font-semibold text-brand-600 hover:underline">Import danych</Link>.
+          </Tip>
+        </div>
+      )}
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
