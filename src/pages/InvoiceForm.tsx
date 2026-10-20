@@ -99,7 +99,9 @@ export default function InvoiceForm() {
   const save = (status: Invoice["status"]) => {
     setTouched(true);
     if (status !== "szkic" && hasErrors) return;
-    const final = { ...inv, status: inv.status === "szkic" || status === "szkic" ? status : inv.status };
+    const nextStatus = inv.status === "szkic" || status === "szkic" ? status : inv.status;
+    // przy wystawieniu szkicu z wpłatami status opłacona/wystawiona wynika z sumy wpłat
+    const final = inv.payments?.length && nextStatus !== "szkic" ? withPayments({ ...inv, status: nextStatus }, inv.payments) : { ...inv, status: nextStatus };
     if (saveContractor && inv.buyer.name && !inv.buyer.contractorId) {
       const cid = uid();
       upsertContractor({ id: cid, name: inv.buyer.name, nip: inv.buyer.nip, address: inv.buyer.address, email: inv.buyer.email, isCompany: inv.buyer.isCompany });
@@ -129,6 +131,7 @@ export default function InvoiceForm() {
   const applyPayments = (payments: NonNullable<Invoice["payments"]>) => {
     const v = withPayments(inv, payments);
     setInv(v);
+    if (!existing) setSaved(false);
     if (existing) upsertInvoice({ ...existing, payments: v.payments, status: v.status, paidDate: v.paidDate });
   };
 
@@ -353,7 +356,7 @@ export default function InvoiceForm() {
             </Card>
           )}
 
-          {inv.status !== "szkic" && <PaymentsCard inv={inv} total={totals.gross} paid={paid} remaining={remaining} onChange={applyPayments} />}
+          <PaymentsCard inv={inv} total={totals.gross} paid={paid} remaining={remaining} onChange={applyPayments} />
 
           {proforma && (
             <Tip tone="info" title="Proforma a zaliczka">
