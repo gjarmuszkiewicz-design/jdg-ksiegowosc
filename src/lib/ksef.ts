@@ -37,8 +37,12 @@ export function buildFa3Xml(company: Company, inv: Invoice): string {
     .join("\n    ");
 
   const buyerNip = cleanNip(inv.buyer.nip);
-  const addr = (a: Invoice["buyer"]["address"]) =>
-    `<Adres><KodKraju>PL</KodKraju>${tag("AdresL1", a.street)}${tag("AdresL2", `${a.postalCode} ${a.city}`.trim())}</Adres>`;
+  // AdresL1 jest w schemacie obowiązkowy — bez ulicy/miasta pomijamy cały element Adres (u nabywcy jest opcjonalny)
+  const addr = (a: Invoice["buyer"]["address"]) => {
+    const l1 = a.street || `${a.postalCode} ${a.city}`.trim();
+    if (!l1) return "";
+    return `<Adres><KodKraju>PL</KodKraju>${tag("AdresL1", l1)}${a.street ? tag("AdresL2", `${a.postalCode} ${a.city}`.trim()) : ""}</Adres>`;
+  };
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">

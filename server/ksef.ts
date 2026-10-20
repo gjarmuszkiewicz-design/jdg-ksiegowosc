@@ -37,9 +37,55 @@ export interface KsefSendResult {
 interface PublicKeyCert {
   certificate: string; // base64 DER
   usage: string[];
+  publicKeyId?: string;
+  validTo?: string;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface KsefInvoiceMetadata {
+  ksefNumber: string;
+  invoiceNumber: string;
+  issueDate: string;
+  invoicingDate?: string;
+  acquisitionDate?: string;
+  seller?: { nip: string; name?: string };
+  buyer?: { identifier?: { type: string; value?: string }; name?: string };
+  netAmount: number;
+  vatAmount: number;
+  grossAmount: number;
+  currency: string;
+  invoiceType: string;
+}
+
+export interface PurchaseMetadata {
+  ksefNumber: string;
+  number: string;
+  supplierName: string;
+  supplierNip: string;
+  buyerNip: string;
+  issueDate: string;
+  receivedDate: string;
+  net: number;
+  vat: number;
+  gross: number;
+  currency: string;
+  invoiceType: string;
+}
+
+/** Dzieli zakres dat (RRRR-MM-DD) na kawałki w obrębie miesięcy kalendarzowych */
+export function monthChunks(from: string, to: string): [string, string][] {
+  const out: [string, string][] = [];
+  let cur = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (cur <= end) {
+    const monthEnd = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 0));
+    const chunkEnd = monthEnd < end ? monthEnd : end;
+    out.push([cur.toISOString().slice(0, 10), chunkEnd.toISOString().slice(0, 10)]);
+    cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+  }
+  return out;
+}
 
 export class KsefClient {
   private accessToken = "";
@@ -70,9 +116,17 @@ export class KsefClient {
     return (text ? JSON.parse(text) : {}) as T;
   }
 
+  private cert(usage: string) {
+    const now = Date.now();
+    return (
+      this.certs.find((c) => c.usage.includes(usage) && (!c.validTo || new Date(c.validTo).getTime() > now)) ??
+      this.certs.find((c) => c.usage.includes(usage)) ??
+      this.certs[0]
+    );
+  }
+
   private publicKey(usage: string) {
-    // WERYFIKUJ: nazwy przeznaczeń certyfikatów ("KsefTokenEncryption", "SymmetricKeyEncryption")
-    const cert = this.certs.find((c) => c.usage.includes(usage)) ?? this.certs[0];
+    const cert = this.cert(usage);
     if (!cert) throw new Error("Brak certyfikatu klucza publicznego MF");
     const pem = `-----BEGIN CERTIFICATE-----\n${cert.certificate.match(/.{1,64}/g)!.join("\n")}\n-----END CERTIFICATE-----`;
     return new crypto.X509Certificate(pem).publicKey;
@@ -87,27 +141,78 @@ export class KsefClient {
 
   async authenticate() {
     this.certs = await this.call<PublicKeyCert[]>("GET", "/security/public-key-certificates", undefined, "");
-    const ch = await this.call<{ challenge: string; timestamp: string }>("POST", "/auth/challenge", undefined, "");
-    const timestampMs = new Date(ch.timestamp).getTime();
+    const ch = await this.call<{ challenge: string; timestamp: string; timestampMs?: number }>("POST", "/auth/challenge", undefined, "");
+    const timestampMs = ch.timestampMs ?? new Date(ch.timestamp).getTime();
     const encryptedToken = this.rsaEncrypt(Buffer.from(`${this.ksefToken}|${timestampMs}`), "KsefTokenEncryption").toString("base64");
 
     const auth = await this.call<{ referenceNumber: string; authenticationToken: { token: string } }>(
       "POST",
       "/auth/ksef-token",
-      { challenge: ch.challenge, contextIdentifier: { type: "Nip", value: this.nip }, encryptedToken },
+      { challenge: ch.challenge, contextIdentifier: { type: "Nip", value: this.nip }, encryptedToken, ...(this.cert("KsefTokenEncryption")?.publicKeyId ? { publicKeyId: this.cert("KsefTokenEncryption")!.publicKeyId } : {}) },
       "",
     );
     const authToken = auth.authenticationToken.token;
 
-    // WERYFIKUJ: kody statusu uwierzytelnienia (200 = sukces, 1xx = w toku, >=400 = błąd)
+    // Status uwierzytelnienia: 100 = w toku, 200 = sukces, >= 400 = błąd (np. nieprawidłowy token lub brak uprawnień)
+    let ok = false;
     for (let i = 0; i < 20; i++) {
-      const st = await this.call<{ status: { code: number; description: string } }>("GET", `/auth/${auth.referenceNumber}`, undefined, authToken);
-      if (st.status.code === 200) break;
-      if (st.status.code >= 400) throw new Error(`Uwierzytelnienie KSeF odrzucone: ${st.status.description}`);
+      const st = await this.call<{ status: { code: number; description: string; details?: string[] } }>("GET", `/auth/${auth.referenceNumber}`, undefined, authToken);
+      if (st.status.code === 200) {
+        ok = true;
+        break;
+      }
+      if (st.status.code >= 400) throw new Error(`KSeF odrzucił logowanie tokenem: ${st.status.description}${st.status.details?.length ? ` (${st.status.details.join("; ")})` : ""}`);
       await sleep(1000);
     }
+    if (!ok) throw new Error("KSeF nie potwierdził logowania w czasie 20 s — spróbuj ponownie za chwilę.");
     const redeemed = await this.call<{ accessToken: { token: string } }>("POST", "/auth/token/redeem", undefined, authToken);
     this.accessToken = redeemed.accessToken.token;
+  }
+
+  /**
+   * Faktury, w których jesteśmy nabywcą (Podmiot 2), wystawione w podanym okresie.
+   * Zapytania po miesiącu, stronicowanie do 100 rekordów (POST /invoices/query/metadata).
+   */
+  async queryPurchases(from: string, to: string): Promise<PurchaseMetadata[]> {
+    if (!this.accessToken) await this.authenticate();
+    const out: PurchaseMetadata[] = [];
+    for (const [start, end] of monthChunks(from, to)) {
+      for (let page = 0; page < 50; page++) {
+        const res = await this.call<{ hasMore: boolean; isTruncated: boolean; invoices: KsefInvoiceMetadata[] }>(
+          "POST",
+          `/invoices/query/metadata?pageSize=100&pageOffset=${page}&sortOrder=Asc`,
+          { subjectType: "Subject2", dateRange: { dateType: "Issue", from: `${start}T00:00:00+00:00`, to: `${end}T23:59:59+00:00` } },
+        );
+        for (const m of res.invoices ?? [])
+          out.push({
+            ksefNumber: m.ksefNumber,
+            number: m.invoiceNumber,
+            supplierName: m.seller?.name ?? "",
+            supplierNip: m.seller?.nip ?? "",
+            buyerNip: m.buyer?.identifier?.value ?? "",
+            issueDate: m.issueDate,
+            receivedDate: (m.acquisitionDate ?? m.invoicingDate ?? "").slice(0, 10),
+            net: m.netAmount,
+            vat: m.vatAmount,
+            gross: m.grossAmount,
+            currency: m.currency,
+            invoiceType: m.invoiceType,
+          });
+        if (!res.hasMore || res.isTruncated) break;
+      }
+    }
+    return out;
+  }
+
+  /** Pełny XML faktury po numerze KSeF */
+  async getInvoiceXml(ksefNumber: string): Promise<string> {
+    if (!this.accessToken) await this.authenticate();
+    const res = await fetch(`${this.base}/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
+      headers: { Authorization: `Bearer ${this.accessToken}`, Accept: "application/xml" },
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`KSeF GET /invoices/ksef → ${res.status}: ${text.slice(0, 300)}`);
+    return text;
   }
 
   async sendInvoice(xml: string): Promise<KsefSendResult> {
@@ -121,6 +226,7 @@ export class KsefClient {
       encryption: {
         encryptedSymmetricKey: this.rsaEncrypt(key, "SymmetricKeyEncryption").toString("base64"),
         initializationVector: iv.toString("base64"),
+        ...(this.cert("SymmetricKeyEncryption")?.publicKeyId ? { publicKeyId: this.cert("SymmetricKeyEncryption")!.publicKeyId } : {}),
       },
     });
 

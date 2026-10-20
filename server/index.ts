@@ -9,13 +9,17 @@ import { searchArticles } from "../src/lib/knowledge";
 import { ALLOWED_SEARCH_DOMAINS, checkRateLimit, isOnTopic, LIMITS, OFF_TOPIC_MESSAGE } from "./aiGuard";
 import { authRouter, hashPassword, type AuthedRequest } from "./auth";
 import { createStorage } from "./storage";
+import { validateFa3 } from "./xmlValidate";
 import { KsefClient, simulatePurchases, simulateSend, type KsefEnv } from "./ksef";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8787);
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const KSEF_MODE = process.env.KSEF_MODE === "live" ? "live" : "symulacja";
-const KSEF_ENV = (["test", "demo", "prod"].includes(process.env.KSEF_ENV || "") ? process.env.KSEF_ENV : "test") as KsefEnv;
+// Domyślnie środowisko produkcyjne — prawdziwy token KSeF działa tylko tam
+const KSEF_ENV = (["test", "demo", "prod"].includes(process.env.KSEF_ENV || "") ? process.env.KSEF_ENV : "prod") as KsefEnv;
+// Wysyłka faktur do KSeF wymaga osobnego włączenia (KSEF_SEND=live) — faktura w KSeF ma skutki prawne
+const KSEF_SEND = process.env.KSEF_SEND === "live";
 
 const hasAi = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 const hasSmtp = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
@@ -53,7 +57,7 @@ app.put("/api/state", async (req: AuthedRequest, res, next) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, version: BUILD_VERSION, storage: storage.kind, ai: hasAi(), smtp: hasSmtp(), ksefMode: KSEF_MODE, ksefEnv: KSEF_ENV, model: MODEL });
+  res.json({ ok: true, version: BUILD_VERSION, storage: storage.kind, ai: hasAi(), smtp: hasSmtp(), ksefMode: KSEF_MODE, ksefEnv: KSEF_ENV, ksefSend: KSEF_SEND, model: MODEL });
 });
 
 // ───────────────────────── Asystent AI ─────────────────────────
@@ -273,7 +277,12 @@ app.post("/api/ksef/send", async (req, res) => {
   if (cleanNip.length !== 10) return res.status(400).json({ ok: false, status: "odrzucona", message: "Brak poprawnego NIP sprzedawcy." });
 
   const ksefToken = token || process.env.KSEF_TOKEN || "";
-  if (KSEF_MODE !== "live" || !ksefToken) return res.json(simulateSend(cleanNip));
+  if (KSEF_MODE !== "live" || !KSEF_SEND || !ksefToken) return res.json(simulateSend(cleanNip));
+
+  // Nie wysyłamy niczego, co nie przechodzi oficjalnego schematu FA(3)
+  const errors = await validateFa3(xml);
+  if (errors === undefined) return res.status(500).json({ ok: false, status: "brak", message: "Serwer nie może sprawdzić faktury (brak xmllint) — wysyłka wstrzymana." });
+  if (errors) return res.status(400).json({ ok: false, status: "brak", message: `Faktura nie spełnia schematu FA(3) i nie została wysłana: ${errors.join("; ")}` });
 
   try {
     const client = new KsefClient(KSEF_ENV, cleanNip, ksefToken);
@@ -284,13 +293,42 @@ app.post("/api/ksef/send", async (req, res) => {
   }
 });
 
-app.get("/api/ksef/purchases", (req, res) => {
+app.get("/api/ksef/purchases", async (req, res) => {
   const nip = String(req.query.nip || "").replace(/\D/g, "");
+  const token = String(req.headers["x-ksef-token"] || process.env.KSEF_TOKEN || "");
+  if (KSEF_MODE === "live") {
+    if (nip.length !== 10) return res.status(400).json({ ok: false, message: "Uzupełnij NIP firmy w Ustawieniach." });
+    if (!token) return res.status(400).json({ ok: false, message: "Brak tokena KSeF — wklej go w Ustawienia → KSeF." });
+    const today = new Date().toISOString().slice(0, 10);
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from)) ? String(req.query.from) : `${today.slice(0, 7)}-01`;
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to)) ? String(req.query.to) : today;
+    try {
+      const client = new KsefClient(KSEF_ENV, nip, token);
+      const items = await client.queryPurchases(from, to);
+      return res.json({ ok: true, mode: KSEF_MODE, env: KSEF_ENV, from, to, items });
+    } catch (err) {
+      console.error("[ksef purchases]", err);
+      return res.status(502).json({ ok: false, message: `Nie udało się pobrać faktur z KSeF: ${(err as Error).message}` });
+    }
+  }
   // Pobieranie faktur zakupowych (POST /invoices/query/metadata) — w trybie live do zaimplementowania po weryfikacji API
   // Bez prawdziwego połączenia nie pokazujemy przykładowych faktur — łatwo je pomylić z własnymi
   void simulatePurchases;
   void nip;
   res.json({ mode: KSEF_MODE, simulated: true, items: [], message: "Pobieranie faktur z KSeF nie jest jeszcze włączone. Pobierz XML-e z Aplikacji Podatnika KSeF i wgraj je w Import danych." });
+});
+
+app.get("/api/ksef/invoice/:ksefNumber", async (req, res) => {
+  const nip = String(req.query.nip || "").replace(/\D/g, "");
+  const token = String(req.headers["x-ksef-token"] || process.env.KSEF_TOKEN || "");
+  if (KSEF_MODE !== "live" || !token || nip.length !== 10) return res.status(400).json({ ok: false, message: "Połączenie z KSeF nie jest włączone." });
+  try {
+    const xml = await new KsefClient(KSEF_ENV, nip, token).getInvoiceXml(req.params.ksefNumber);
+    res.type("application/xml").send(xml);
+  } catch (err) {
+    console.error("[ksef invoice]", err);
+    res.status(502).json({ ok: false, message: (err as Error).message });
+  }
 });
 
 // ───────────────────────── Frontend (produkcja) ─────────────────────────
