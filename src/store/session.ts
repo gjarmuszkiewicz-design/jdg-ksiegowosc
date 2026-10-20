@@ -60,6 +60,23 @@ async function pushNow() {
   }
 }
 
+/** Zamykanie / przeładowanie karty: wyślij niezapisane zmiany od razu */
+function flushOnLeave() {
+  if (!timer) return;
+  clearTimeout(timer);
+  timer = null;
+  try {
+    const blob = new Blob([JSON.stringify({ state: snapshot() })], { type: "application/json" });
+    navigator.sendBeacon("/api/state", blob);
+  } catch {
+    /* przeglądarka bez sendBeacon */
+  }
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushOnLeave);
+  document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flushOnLeave());
+}
+
 function startAutosave() {
   unsubscribe?.();
   unsubscribe = useStore.subscribe(() => {

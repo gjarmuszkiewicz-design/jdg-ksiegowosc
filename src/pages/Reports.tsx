@@ -4,7 +4,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieCh
 import { Card, CardHeader, EmptyState, PageHeader, Stat, Tip } from "@/components/ui";
 import { categoryLabel } from "@/lib/costs";
 import { currentYear, useYearSummary } from "@/lib/hooks";
-import { invoiceTotals } from "@/lib/invoice";
+import { invoiceTotals, isAccounting } from "@/lib/invoice";
 import { pln, round2 } from "@/lib/money";
 import { costKup, invoiceRevenue, MONTHS_SHORT } from "@/lib/tax";
 import type { CostCategory } from "@/lib/types";
@@ -22,7 +22,7 @@ export default function Reports() {
   const [year, setYear] = useState(currentYear());
   const summary = useYearSummary(year);
 
-  const yInv = useMemo(() => invoices.filter((i) => i.status !== "szkic" && (i.saleDate || i.issueDate).startsWith(String(year))), [invoices, year]);
+  const yInv = useMemo(() => invoices.filter((i) => isAccounting(i) && (i.saleDate || i.issueDate).startsWith(String(year))), [invoices, year]);
   const yCost = useMemo(() => costs.filter((c) => c.date.startsWith(String(year))), [costs, year]);
   const linkedIds = useMemo(() => new Set(assets.map((a) => a.costId).filter(Boolean) as string[]), [assets]);
   const isRyczalt = company.taxForm === "ryczalt";

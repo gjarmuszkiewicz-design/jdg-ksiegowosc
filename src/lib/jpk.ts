@@ -1,4 +1,4 @@
-import { invoiceTotals } from "./invoice";
+import { invoiceTotals, isAccounting } from "./invoice";
 import { costDeductibleVat, monthKey } from "./tax";
 import { cleanNip } from "./validation";
 import { amt, esc, tag } from "./xml";
@@ -27,7 +27,7 @@ export interface JpkResult {
  */
 export function buildJpkV7M(company: Company, invoices: Invoice[], costs: Cost[], month: string, carryFromPrev = 0): JpkResult {
   const [year, m] = month.split("-");
-  const sales = invoices.filter((i) => i.status !== "szkic" && monthKey(i.saleDate || i.issueDate) === month);
+  const sales = invoices.filter((i) => isAccounting(i) && monthKey(i.saleDate || i.issueDate) === month);
   const purchases = costs.filter((c) => monthKey(c.vatDate || c.date) === month && costDeductibleVat(c, company) !== 0);
 
   const P: Record<string, number> = {};

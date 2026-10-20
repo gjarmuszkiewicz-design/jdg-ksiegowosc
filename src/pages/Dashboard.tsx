@@ -7,7 +7,7 @@ import { Badge, Button, Card, CardHeader, Stat, Tip } from "@/components/ui";
 import { daysUntil, upcomingDeadlines } from "@/lib/deadlines";
 import { insights, nextSteps } from "@/lib/guide";
 import { currentYear, useYearSummary } from "@/lib/hooks";
-import { invoiceTotals, isOverdue } from "@/lib/invoice";
+import { invoiceTotals, isAccounting, isOverdue, isProforma, paymentState, remainingAmount } from "@/lib/invoice";
 import { pln } from "@/lib/money";
 import { MONTHS_SHORT } from "@/lib/tax";
 import { useStore } from "@/store/useStore";
@@ -32,8 +32,8 @@ export default function Dashboard() {
   const tips = useMemo(() => insights({ company, contractors, invoices, costs, assets }).filter((t) => !dismissedTips.includes(t.id)), [company, contractors, invoices, costs, assets, dismissedTips]);
   const deadlines = useMemo(() => upcomingDeadlines(company), [company]);
 
-  const unpaid = invoices.filter((i) => i.status !== "oplacona" && i.status !== "szkic");
-  const unpaidSum = unpaid.reduce((s, i) => s + invoiceTotals(i).gross, 0);
+  const unpaid = invoices.filter((i) => isAccounting(i) && remainingAmount(i) > 0);
+  const unpaidSum = unpaid.reduce((s, i) => s + remainingAmount(i), 0);
   const overdue = unpaid.filter((i) => isOverdue(i));
 
   // Do zapłaty w tym miesiącu (za poprzedni miesiąc)
@@ -181,7 +181,7 @@ export default function Dashboard() {
                   <td className="table-cell text-slate-500">{inv.issueDate}</td>
                   <td className="table-cell text-right font-semibold">{pln(invoiceTotals(inv).gross)}</td>
                   <td className="table-cell text-right">
-                    {inv.status === "oplacona" ? <Badge tone="green">opłacona</Badge> : isOverdue(inv) ? <Badge tone="red">po terminie</Badge> : <Badge tone="amber">czeka</Badge>}
+                    {isProforma(inv) ? <Badge tone="violet">proforma</Badge> : paymentState(inv) === "oplacona" ? <Badge tone="green">opłacona</Badge> : isOverdue(inv) ? <Badge tone="red">po terminie</Badge> : paymentState(inv) === "czesciowo" ? <Badge tone="amber">częściowo</Badge> : <Badge tone="amber">czeka</Badge>}
                   </td>
                 </tr>
               ))}

@@ -40,6 +40,8 @@ export interface Company {
   /** Podstawa wymiaru dla Małego ZUS Plus (wyliczona z dochodu z poprzedniego roku) */
   malyZusBase: number;
   invoiceNumberPattern: string;
+  /** Wzór numeru proformy, domyślnie PRO/{NR}/{RRRR} */
+  proformaNumberPattern?: string;
   defaultPaymentDays: number;
   ksefToken: string;
   /** Stan otwarcia przy przejściu z innego programu w trakcie roku */
@@ -88,6 +90,16 @@ export interface InvoiceItem {
 }
 
 export type InvoiceStatus = "szkic" | "wystawiona" | "wyslana" | "oplacona";
+export type InvoiceKind = "faktura" | "proforma";
+
+/** Wpłata od klienta za fakturę (pełna lub częściowa) */
+export interface InvoicePayment {
+  id: string;
+  date: string;
+  amount: number;
+  method?: PaymentMethod;
+  note?: string;
+}
 export type KsefStatus = "brak" | "w_kolejce" | "wyslana" | "przyjeta" | "odrzucona";
 
 export interface Invoice {
@@ -105,6 +117,14 @@ export interface Invoice {
   paidDate?: string;
   ksef: { status: KsefStatus; number?: string; sentAt?: string; message?: string };
   createdAt: string;
+  /** Faktura (domyślnie) albo proforma — proforma nie jest dokumentem księgowym */
+  kind?: InvoiceKind;
+  /** Wpłaty od klienta; suma ≥ kwoty brutto oznacza fakturę opłaconą */
+  payments?: InvoicePayment[];
+  /** Faktura końcowa: z której proformy powstała */
+  proformaId?: string;
+  /** Proforma: faktura końcowa wystawiona na jej podstawie */
+  finalInvoiceId?: string;
   /** Skąd pochodzi dokument, np. "import:JPK_V7M" */
   source?: string;
 }

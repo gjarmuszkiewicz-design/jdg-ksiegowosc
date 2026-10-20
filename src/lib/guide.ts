@@ -1,5 +1,5 @@
 import { PARAMS_2026 as P } from "./config2026";
-import { isOverdue } from "./invoice";
+import { isAccounting, isOverdue, isProforma } from "./invoice";
 import { pln } from "./money";
 import { monthKey, monthLabel, prevMonthKey, yearSummary } from "./tax";
 import { isValidIban, isValidNip } from "./validation";
@@ -54,7 +54,7 @@ export function nextSteps({ company, contractors, invoices, costs, assets, payme
   if (!contractors.length)
     steps.push({ id: "contractor", title: "Dodaj pierwszego kontrahenta", description: "Zapisz dane klienta raz — kolejne faktury wystawisz w kilka sekund.", to: "/kontrahenci", cta: "Dodaj klienta", tone: "info" });
 
-  if (!invoices.some((i) => monthKey(i.issueDate) === thisMonth))
+  if (!invoices.some((i) => !isProforma(i) && monthKey(i.issueDate) === thisMonth))
     steps.push({ id: "invoice", title: "Wystaw fakturę za ten miesiąc", description: "Nie masz jeszcze żadnej faktury sprzedażowej w tym miesiącu.", to: "/faktury/nowa", cta: "Wystaw fakturę", tone: "info" });
 
   const overdue = invoices.filter((i) => isOverdue(i));
@@ -62,7 +62,7 @@ export function nextSteps({ company, contractors, invoices, costs, assets, payme
     steps.push({ id: "overdue", title: `${overdue.length} ${overdue.length === 1 ? "faktura po terminie" : "faktury po terminie"}`, description: `Klienci zalegają łącznie z płatnościami. Wyślij przypomnienie lub oznacz jako opłacone.`, to: "/faktury?filtr=po-terminie", cta: "Zobacz", tone: "danger" });
 
   // KSeF obowiązkowy dla większości firm od 1.04.2026 — starszych faktur nie wysyłamy
-  const ksefPending = invoices.filter((i) => i.status !== "szkic" && i.buyer.isCompany && i.issueDate >= "2026-04-01" && (i.ksef.status === "brak" || i.ksef.status === "odrzucona"));
+  const ksefPending = invoices.filter((i) => isAccounting(i) && !i.ksef.number && i.buyer.isCompany && i.issueDate >= "2026-04-01" && (i.ksef.status === "brak" || i.ksef.status === "odrzucona"));
   if (ksefPending.length)
     steps.push({ id: "ksef", title: `Wyślij ${ksefPending.length} ${ksefPending.length === 1 ? "fakturę" : "faktur"} do KSeF`, description: "Faktury dla firm muszą trafić do KSeF — dopiero wtedy są uznane za wystawione.", to: "/ksef", cta: "Przejdź do KSeF", tone: "warning" });
 
@@ -110,7 +110,7 @@ export function insights(ctx: Ctx, year = new Date().getFullYear()): Insight[] {
     out.push({ id: "chorobowe", tone: "info", title: "Nie płacisz dobrowolnej składki chorobowej", description: "Bez niej nie dostaniesz zasiłku chorobowego ani macierzyńskiego. To kilkadziesiąt–kilkaset zł miesięcznie.", to: "/wiedza/ulga-na-start" });
 
   const clients = new Map<string, number>();
-  for (const i of invoices) if (i.status !== "szkic") clients.set(i.buyer.name, (clients.get(i.buyer.name) ?? 0) + 1);
+  for (const i of invoices) if (isAccounting(i)) clients.set(i.buyer.name, (clients.get(i.buyer.name) ?? 0) + 1);
   const top = [...clients.entries()].sort((a, b) => b[1] - a[1])[0];
   if (top && clients.size > 0 && top[1] / invoices.length > 0.7)
     out.push({ id: "jeden-klient", tone: "info", title: "Większość przychodu od jednego klienta", description: `${top[0]} odpowiada za ponad 70% faktur. Przy B2B dla byłego pracodawcy sprawdź, czy możesz stosować podatek liniowy.`, to: "/wiedza/forma-opodatkowania" });

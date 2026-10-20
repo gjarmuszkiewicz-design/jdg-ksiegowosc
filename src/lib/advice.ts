@@ -1,7 +1,7 @@
 import { DE_MINIMIS_EUR } from "./assets";
 import { PARAMS_2026 as P } from "./config2026";
 import type { MarginalRates } from "./explain";
-import { invoiceTotals } from "./invoice";
+import { isAccounting, remainingAmount } from "./invoice";
 import { pln, round2 } from "./money";
 import type { MonthSummary, YearData } from "./tax";
 
@@ -114,8 +114,8 @@ export function monthlyAdvice(data: YearData, summary: MonthSummary[], idx: numb
       });
   }
 
-  const unpaid = invoices.filter((i) => i.status !== "oplacona" && i.status !== "szkic");
-  const unpaidSum = unpaid.reduce((a, i) => a + invoiceTotals(i).gross, 0);
+  const unpaid = invoices.filter((i) => isAccounting(i) && remainingAmount(i) > 0);
+  const unpaidSum = unpaid.reduce((a, i) => a + remainingAmount(i), 0);
   const toPay = round2(s.pit + s.vatDue + s.social + s.health);
   if (unpaidSum > 0 && toPay > 0)
     out.push({

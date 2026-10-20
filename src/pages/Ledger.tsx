@@ -5,6 +5,7 @@ import { currentYear } from "@/lib/hooks";
 import { num2, pln, round2 } from "@/lib/money";
 import { monthlyDepreciation } from "@/lib/assets";
 import { costKup, invoiceRevenue, MONTHS_PL, monthKey } from "@/lib/tax";
+import { isAccounting } from "@/lib/invoice";
 import { downloadFile } from "@/lib/xml";
 import { useStore } from "@/store/useStore";
 import { YearSelect } from "./Vat";
@@ -41,7 +42,7 @@ export default function Ledger() {
     const r: Row[] = [];
     for (const i of invoices) {
       const d = i.saleDate || i.issueDate;
-      if (i.status === "szkic" || !inPeriod(d)) continue;
+      if (!isAccounting(i) || !inPeriod(d)) continue;
       r.push({ date: d, doc: i.number, name: i.buyer.name, nip: i.buyer.nip, desc: i.items.map((x) => x.name).join(", "), sale: invoiceRevenue(i), otherRevenue: 0, goods: 0, side: 0, wages: 0, other: 0 });
     }
     if (!isRyczalt)
@@ -68,7 +69,7 @@ export default function Ledger() {
   const ytdTotals = useMemo(() => {
     const endMonth = month === 0 ? 12 : month;
     const upTo = `${year}-${String(endMonth).padStart(2, "0")}`;
-    const rev = invoices.filter((i) => i.status !== "szkic" && (i.saleDate || i.issueDate).startsWith(String(year)) && monthKey(i.saleDate || i.issueDate) <= upTo).reduce((s, i) => s + invoiceRevenue(i), 0);
+    const rev = invoices.filter((i) => isAccounting(i) && (i.saleDate || i.issueDate).startsWith(String(year)) && monthKey(i.saleDate || i.issueDate) <= upTo).reduce((s, i) => s + invoiceRevenue(i), 0);
     let exp = isRyczalt ? 0 : costs.filter((c) => !linkedIds.has(c.id) && c.date.startsWith(String(year)) && monthKey(c.date) <= upTo).reduce((s, c) => s + costKup(c, company), 0);
     if (!isRyczalt) for (let m = 1; m <= endMonth; m++) exp += monthlyDepreciation(assets, `${year}-${String(m).padStart(2, "0")}`).deductible;
     return { rev: round2(rev), exp: round2(exp) };

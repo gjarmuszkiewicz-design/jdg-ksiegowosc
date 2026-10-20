@@ -2,18 +2,20 @@ import { CheckCircle2, Copy, FilePlus2, FileText, Mail, Printer, Search, Trash2 
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, EmptyState, Modal, PageHeader, Stat, Tabs, Tip } from "@/components/ui";
-import { invoiceTotals, isOverdue, nextInvoiceNumber } from "@/lib/invoice";
+import { invoiceTotals, isAccounting, isOverdue, isProforma, markPaid, nextNumberFor, paidAmount, paymentState, remainingAmount } from "@/lib/invoice";
 import { pln } from "@/lib/money";
 import type { Invoice } from "@/lib/types";
 import { todayIso, uid, useStore } from "@/store/useStore";
 import { SendInvoiceModal } from "./SendInvoiceModal";
 
-type Filter = "wszystkie" | "nieoplacone" | "po-terminie" | "oplacone" | "szkice";
+type Filter = "wszystkie" | "nieoplacone" | "po-terminie" | "oplacone" | "proformy" | "szkice";
 
 export function invoiceStatusBadge(inv: Invoice) {
   if (inv.status === "szkic") return <Badge tone="slate">szkic</Badge>;
-  if (inv.status === "oplacona") return <Badge tone="green">opłacona</Badge>;
-  if (isOverdue(inv)) return <Badge tone="red">po terminie</Badge>;
+  const state = paymentState(inv);
+  if (state === "oplacona") return <Badge tone="green">opłacona</Badge>;
+  if (isOverdue(inv)) return <Badge tone="red">{state === "czesciowo" ? "częściowo, po terminie" : "po terminie"}</Badge>;
+  if (state === "czesciowo") return <Badge tone="amber">częściowo opłacona</Badge>;
   if (inv.status === "wyslana") return <Badge tone="blue">wysłana</Badge>;
   return <Badge tone="amber">czeka na zapłatę</Badge>;
 }
@@ -27,7 +29,7 @@ export function ksefBadge(inv: Invoice) {
 }
 
 export default function Invoices() {
-  const { invoices, company, updateInvoice, deleteInvoice, upsertInvoice } = useStore();
+  const { invoices, company, deleteInvoice, upsertInvoice } = useStore();
   const [params, setParams] = useSearchParams();
   const filter = (params.get("filtr") as Filter) || "wszystkie";
   const [q, setQ] = useState("");
@@ -41,9 +43,11 @@ export default function Invoices() {
     () =>
       invoices
         .filter((i) => {
-          if (filter === "nieoplacone") return i.status !== "oplacona" && i.status !== "szkic";
+          if (filter === "proformy") return isProforma(i);
+          if (isProforma(i)) return false;
+          if (filter === "nieoplacone") return i.status !== "szkic" && remainingAmount(i) > 0;
           if (filter === "po-terminie") return isOverdue(i);
-          if (filter === "oplacone") return i.status === "oplacona";
+          if (filter === "oplacone") return paymentState(i) === "oplacona";
           if (filter === "szkice") return i.status === "szkic";
           return true;
         })
@@ -54,15 +58,15 @@ export default function Invoices() {
   );
 
   const totals = list.reduce((s, i) => { const t = invoiceTotals(i); return { net: s.net + t.net, gross: s.gross + t.gross }; }, { net: 0, gross: 0 });
-  const unpaid = invoices.filter((i) => i.status !== "oplacona" && i.status !== "szkic").reduce((s, i) => s + invoiceTotals(i).gross, 0);
+  const unpaid = invoices.filter((i) => isAccounting(i)).reduce((s, i) => s + remainingAmount(i), 0);
 
   const duplicate = (inv: Invoice) => {
     const issueDate = todayIso();
     const copy: Invoice = {
       ...inv, id: uid(), issueDate, saleDate: issueDate,
       dueDate: new Date(Date.now() + company.defaultPaymentDays * 86400000).toISOString().slice(0, 10),
-      number: nextInvoiceNumber(company.invoiceNumberPattern, invoices, issueDate),
-      status: "szkic", paidDate: undefined, ksef: { status: "brak" }, createdAt: new Date().toISOString(),
+      number: nextNumberFor(company, invoices, inv.kind ?? "faktura", issueDate),
+      status: "szkic", paidDate: undefined, payments: undefined, proformaId: undefined, finalInvoiceId: undefined, ksef: { status: "brak" }, createdAt: new Date().toISOString(),
     };
     upsertInvoice(copy);
     navigate(`/faktury/${copy.id}`);
@@ -73,7 +77,7 @@ export default function Invoices() {
       <PageHeader
         title="Faktury sprzedaży"
         subtitle="Wystawiaj, drukuj, wysyłaj i pilnuj płatności"
-        actions={<Button to="/faktury/nowa" icon={<FilePlus2 className="h-4 w-4" />}>Nowa faktura</Button>}
+        actions={<><Button to="/faktury/nowa?typ=proforma" variant="secondary">Nowa proforma</Button><Button to="/faktury/nowa" icon={<FilePlus2 className="h-4 w-4" />}>Nowa faktura</Button></>}
       />
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Stat label="Netto (widoczne)" value={pln(totals.net)} icon={<FileText className="h-5 w-5" />} />
@@ -91,6 +95,7 @@ export default function Invoices() {
               { value: "nieoplacone", label: "Nieopłacone" },
               { value: "po-terminie", label: "Po terminie" },
               { value: "oplacone", label: "Opłacone" },
+              { value: "proformy", label: "Proformy" },
               { value: "szkice", label: "Szkice" },
             ]}
           />
@@ -117,6 +122,7 @@ export default function Invoices() {
                   <th className="table-head">Termin</th>
                   <th className="table-head text-right">Netto</th>
                   <th className="table-head text-right">Brutto</th>
+                  <th className="table-head text-right">Pozostało</th>
                   <th className="table-head">Status</th>
                   <th className="table-head text-right">Akcje</th>
                 </tr>
@@ -132,11 +138,15 @@ export default function Invoices() {
                       <td className="table-cell text-slate-600">{inv.dueDate}</td>
                       <td className="table-cell text-right">{pln(t.net)}</td>
                       <td className="table-cell text-right font-semibold">{pln(t.gross)}</td>
-                      <td className="table-cell"><div className="flex flex-wrap gap-1">{invoiceStatusBadge(inv)}{ksefBadge(inv)}</div></td>
+                      <td className="table-cell text-right">
+                        {inv.status === "szkic" ? "—" : remainingAmount(inv) > 0 ? <span className="font-semibold text-amber-700">{pln(remainingAmount(inv))}</span> : <span className="text-emerald-600">0,00 zł</span>}
+                        {paymentState(inv) === "czesciowo" && <div className="text-[11px] text-slate-400">zapł. {pln(paidAmount(inv))}</div>}
+                      </td>
+                      <td className="table-cell"><div className="flex flex-wrap gap-1">{isProforma(inv) && <Badge tone="violet">proforma</Badge>}{invoiceStatusBadge(inv)}{!isProforma(inv) && ksefBadge(inv)}{inv.finalInvoiceId && <Badge tone="green">faktura wystawiona</Badge>}</div></td>
                       <td className="table-cell">
                         <div className="flex justify-end gap-1 opacity-70 group-hover:opacity-100">
-                          {inv.status !== "oplacona" && inv.status !== "szkic" && (
-                            <button title="Oznacz jako opłaconą" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" onClick={() => updateInvoice(inv.id, { status: "oplacona", paidDate: todayIso() })}><CheckCircle2 className="h-4 w-4" /></button>
+                          {paymentState(inv) !== "oplacona" && inv.status !== "szkic" && (
+                            <button title="Oznacz jako opłaconą w całości" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" onClick={() => upsertInvoice(markPaid(inv, todayIso(), uid()))}><CheckCircle2 className="h-4 w-4" /></button>
                           )}
                           <button title="Drukuj / PDF" className="rounded-lg p-1.5 hover:bg-slate-100" onClick={() => window.open(`/faktury/${inv.id}/druk`, "_blank")}><Printer className="h-4 w-4" /></button>
                           <button title="Wyślij e-mailem" className="rounded-lg p-1.5 hover:bg-slate-100" onClick={() => setToSend(inv)}><Mail className="h-4 w-4" /></button>

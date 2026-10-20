@@ -1,15 +1,15 @@
 import clsx from "clsx";
-import { ArrowLeft, Building2, CloudUpload, Download, Mail, Plus, Printer, Save, Search, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Banknote, Building2, CloudUpload, Download, FileCheck2, Mail, Plus, Printer, Save, Search, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, CardHeader, Field, Hint, PageHeader, Tip, Toggle } from "@/components/ui";
-import { invoiceTotals, itemTotals, nextInvoiceNumber, VAT_RATES } from "@/lib/invoice";
+import { Badge, Button, Card, CardHeader, Field, Hint, PageHeader, Tabs, Tip, Toggle } from "@/components/ui";
+import { invoiceTotals, isProforma, itemTotals, markPaid, nextNumberFor, paidAmount, paymentState, remainingAmount, VAT_RATES, withPayments } from "@/lib/invoice";
 import { buildFa3Xml } from "@/lib/ksef";
 import { pln } from "@/lib/money";
 import { vatRateLabel } from "@/lib/tax";
 import { cleanNip, isValidNip } from "@/lib/validation";
 import { downloadFile } from "@/lib/xml";
-import type { Invoice, InvoiceItem, PaymentMethod } from "@/lib/types";
+import type { Invoice, InvoiceItem, InvoiceKind, PaymentMethod } from "@/lib/types";
 import { todayIso, uid, useStore } from "@/store/useStore";
 import { SendInvoiceModal } from "./SendInvoiceModal";
 
@@ -30,9 +30,11 @@ export default function InvoiceForm() {
   const blank = (): Invoice => {
     const issueDate = todayIso();
     const pre = contractors.find((c) => c.id === params.get("kontrahent"));
+    const kind: InvoiceKind = params.get("typ") === "proforma" ? "proforma" : "faktura";
     return {
       id: uid(),
-      number: nextInvoiceNumber(company.invoiceNumberPattern, invoices, issueDate),
+      kind,
+      number: nextNumberFor(company, invoices, kind, issueDate),
       issueDate,
       saleDate: issueDate,
       dueDate: addDays(issueDate, company.defaultPaymentDays),
@@ -109,13 +111,70 @@ export default function InvoiceForm() {
     if (!id) navigate(`/faktury/${final.id}`, { replace: true });
   };
 
+  const proforma = isProforma(inv);
+  const docName = proforma ? "Proforma" : "Faktura";
+  const finalInvoice = inv.finalInvoiceId ? invoices.find((i) => i.id === inv.finalInvoiceId) : undefined;
+  const sourceProforma = inv.proformaId ? invoices.find((i) => i.id === inv.proformaId) : undefined;
+  const paid = paidAmount(inv);
+  const remaining = remainingAmount(inv);
+  const payState = paymentState(inv);
+
+  const switchKind = (kind: InvoiceKind) => {
+    if ((inv.kind ?? "faktura") === kind) return;
+    setInv((s) => ({ ...s, kind, number: nextNumberFor(company, invoices, kind, s.issueDate) }));
+    setSaved(false);
+  };
+
+  /** Zapis wpłat od razu — to dane wewnętrzne, nie zmieniają treści faktury */
+  const applyPayments = (payments: NonNullable<Invoice["payments"]>) => {
+    const v = withPayments(inv, payments);
+    setInv(v);
+    if (existing) upsertInvoice({ ...existing, payments: v.payments, status: v.status, paidDate: v.paidDate });
+  };
+
+  /** Faktura końcowa na podstawie proformy: te same pozycje i nabywca, przeniesione wpłaty */
+  const createFinalInvoice = () => {
+    const issueDate = todayIso();
+    const final: Invoice = withPayments(
+      {
+        ...inv,
+        id: uid(),
+        kind: "faktura",
+        number: nextNumberFor(company, invoices, "faktura", issueDate),
+        issueDate,
+        saleDate: issueDate,
+        dueDate: inv.dueDate > issueDate ? inv.dueDate : addDays(issueDate, company.defaultPaymentDays),
+        status: "szkic",
+        paidDate: undefined,
+        ksef: { status: "brak" },
+        proformaId: inv.id,
+        finalInvoiceId: undefined,
+        notes: [inv.notes, `Na podstawie proformy ${inv.number}`].filter(Boolean).join(". "),
+        createdAt: new Date().toISOString(),
+        source: undefined,
+      },
+      (inv.payments ?? []).map((p) => ({ ...p, id: uid(), note: p.note || `wpłata do proformy ${inv.number}` })),
+    );
+    upsertInvoice(final);
+    upsertInvoice({ ...inv, finalInvoiceId: final.id });
+    navigate(`/faktury/${final.id}`);
+  };
+
   return (
     <div>
       <PageHeader
-        title={existing ? `Faktura ${inv.number}` : "Nowa faktura"}
+        title={existing ? `${docName} ${inv.number}` : proforma ? "Nowa proforma" : "Nowa faktura"}
         subtitle={existing ? "Edytuj, drukuj, wyślij lub przekaż do KSeF" : "Wypełnij dane — podpowiemy Ci po drodze"}
         actions={<Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} to="/faktury">Wróć do listy</Button>}
       />
+      {inv.status === "szkic" && !inv.proformaId && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <Tabs<InvoiceKind> value={inv.kind ?? "faktura"} onChange={switchKind} options={[{ value: "faktura", label: "Faktura VAT" }, { value: "proforma", label: "Proforma" }]} />
+          <span className="text-sm text-slate-500">{proforma ? "Proforma to oferta do zapłaty — nie jest fakturą i nie wchodzi do VAT ani podatku." : "Dokument księgowy — trafi do VAT, podatku i KSeF."}</span>
+        </div>
+      )}
+      {sourceProforma && <div className="mb-4"><Tip tone="info" title="Faktura końcowa do proformy">Wystawiona na podstawie proformy <b>{sourceProforma.number}</b>{paid > 0 ? ` — wpłaty z proformy (${pln(paid)}) zostały przeniesione.` : "."} Sprawdź dane i kliknij „Wystaw fakturę”.</Tip></div>}
+      {proforma && finalInvoice && <div className="mb-4"><Tip tone="success" title="Faktura końcowa wystawiona">Do tej proformy wystawiono fakturę <b>{finalInvoice.number}</b>. <Button size="sm" variant="secondary" to={`/faktury/${finalInvoice.id}`}>Otwórz fakturę</Button></Tip></div>}
       {locked && <div className="mb-4"><Tip tone="warning" title="Faktura jest w KSeF">Zmiany po wysłaniu do KSeF wymagają wystawienia faktury korygującej. Edytuj tylko dane wewnętrzne (np. status płatności).</Tip></div>}
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -248,8 +307,9 @@ export default function InvoiceForm() {
         <div className="space-y-4 xl:sticky xl:top-20 xl:self-start">
           <Card className="overflow-hidden">
             <div className="bg-gradient-to-br from-brand-600 to-violet-600 p-5 text-white">
-              <div className="text-sm text-white/70">Do zapłaty</div>
-              <div className="text-3xl font-bold">{pln(totals.gross)}</div>
+              <div className="text-sm text-white/70">{payState === "czesciowo" ? "Pozostało do zapłaty" : "Do zapłaty"}</div>
+              <div className="text-3xl font-bold">{pln(payState === "czesciowo" ? remaining : totals.gross)}</div>
+              {payState === "czesciowo" && <div className="text-sm text-white/80">z {pln(totals.gross)} · zapłacono {pln(paid)}</div>}
               <div className="mt-1 text-sm text-white/80">netto {pln(totals.net)} · VAT {pln(totals.vat)}</div>
             </div>
             <div className="divide-y divide-slate-100 text-sm">
@@ -258,13 +318,18 @@ export default function InvoiceForm() {
               ))}
               <div className="flex items-center justify-between px-5 py-2.5">
                 <span className="text-slate-500">Status</span>
-                <Badge tone={inv.status === "szkic" ? "slate" : inv.status === "oplacona" ? "green" : "amber"}>{inv.status}</Badge>
+                <div className="flex gap-1">
+                  {proforma && <Badge tone="violet">proforma</Badge>}
+                  <Badge tone={inv.status === "szkic" ? "slate" : payState === "oplacona" ? "green" : "amber"}>
+                    {inv.status === "szkic" ? "szkic" : payState === "oplacona" ? "opłacona" : payState === "czesciowo" ? "częściowo opłacona" : "czeka na zapłatę"}
+                  </Badge>
+                </div>
               </div>
             </div>
             <div className="space-y-2 p-5">
               {inv.status === "szkic" ? (
                 <>
-                  <Button className="w-full" size="lg" onClick={() => save("wystawiona")} icon={<Save className="h-5 w-5" />}>Wystaw fakturę</Button>
+                  <Button className="w-full" size="lg" onClick={() => save("wystawiona")} icon={<Save className="h-5 w-5" />}>{proforma ? "Wystaw proformę" : "Wystaw fakturę"}</Button>
                   <Button className="w-full" variant="secondary" onClick={() => save("szkic")}>Zapisz jako szkic</Button>
                 </>
               ) : (
@@ -280,11 +345,20 @@ export default function InvoiceForm() {
               <div className="grid gap-2">
                 <Button variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={() => window.open(`/faktury/${inv.id}/druk`, "_blank")}>Drukuj / zapisz PDF</Button>
                 <Button variant="secondary" icon={<Mail className="h-4 w-4" />} onClick={() => setSendOpen(true)}>Wyślij e-mailem</Button>
-                {inv.buyer.isCompany && inv.ksef.status !== "przyjeta" && <Button variant="secondary" icon={<CloudUpload className="h-4 w-4" />} to="/ksef">Wyślij do KSeF</Button>}
-                <Button variant="ghost" icon={<Download className="h-4 w-4" />} onClick={() => downloadFile(`${inv.number.replace(/\//g, "_")}_FA3.xml`, buildFa3Xml(company, inv))}>Pobierz XML (FA(3))</Button>
-                {inv.status !== "oplacona" && <Button variant="success" onClick={() => { const v = { ...inv, status: "oplacona" as const, paidDate: todayIso() }; upsertInvoice(v); setInv(v); }}>Oznacz jako opłaconą</Button>}
+                {proforma && !finalInvoice && <Button icon={<FileCheck2 className="h-4 w-4" />} onClick={createFinalInvoice}>Wystaw fakturę końcową</Button>}
+                {!proforma && inv.buyer.isCompany && !inv.ksef.number && inv.ksef.status !== "przyjeta" && <Button variant="secondary" icon={<CloudUpload className="h-4 w-4" />} to="/ksef">Wyślij do KSeF</Button>}
+                {!proforma && <Button variant="ghost" icon={<Download className="h-4 w-4" />} onClick={() => downloadFile(`${inv.number.replace(/\//g, "_")}_FA3.xml`, buildFa3Xml(company, inv))}>Pobierz XML (FA(3))</Button>}
+                {payState !== "oplacona" && <Button variant="success" onClick={() => { const v = markPaid(inv, todayIso(), uid()); setInv(v); upsertInvoice(v); }}>Oznacz jako opłaconą w całości</Button>}
               </div>
             </Card>
+          )}
+
+          {inv.status !== "szkic" && <PaymentsCard inv={inv} total={totals.gross} paid={paid} remaining={remaining} onChange={applyPayments} />}
+
+          {proforma && (
+            <Tip tone="info" title="Proforma a zaliczka">
+              Jeśli klient zapłacił przed wykonaniem usługi, otrzymana kwota to zaliczka — przy VAT czynnym wystaw do niej fakturę (zaliczkową) najpóźniej 15. dnia następnego miesiąca. Najprościej: po zapłacie kliknij „Wystaw fakturę końcową”.
+            </Tip>
           )}
 
           <Tip title="Podpowiedź" tone="tip">
@@ -294,5 +368,55 @@ export default function InvoiceForm() {
       </div>
       {sendOpen && <SendInvoiceModal invoice={inv} onClose={() => setSendOpen(false)} />}
     </div>
+  );
+}
+
+function PaymentsCard({ inv, total, paid, remaining, onChange }: { inv: Invoice; total: number; paid: number; remaining: number; onChange: (p: NonNullable<Invoice["payments"]>) => void }) {
+  const [date, setDate] = useState(todayIso());
+  const [amount, setAmount] = useState<number>(remaining);
+  const [note, setNote] = useState("");
+  useEffect(() => setAmount(remaining), [remaining]);
+  // faktury oznaczone jako opłacone przed wprowadzeniem wpłat — pokazujemy jako jedną wpłatę
+  const list = inv.payments?.length ? inv.payments : paid > 0 ? [{ id: "legacy", date: inv.paidDate ?? inv.issueDate, amount: paid }] : [];
+  const add = () => {
+    if (!amount || amount <= 0) return;
+    onChange([...list.map((p) => (p.id === "legacy" ? { ...p, id: uid() } : p)), { id: uid(), date, amount: Math.round(amount * 100) / 100, method: inv.paymentMethod, note: note || undefined }]);
+    setNote("");
+  };
+  return (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center gap-2 font-semibold"><Banknote className="h-4 w-4 text-emerald-600" /> Wpłaty od klienta</div>
+      <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600" style={{ width: `${Math.min(100, total ? (paid / total) * 100 : 0)}%` }} />
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+        <div><div className="text-slate-500">Zapłacono</div><div className="font-semibold text-emerald-700">{pln(paid)}</div></div>
+        <div><div className="text-slate-500">Pozostało</div><div className={clsx("font-semibold", remaining > 0 ? "text-amber-700" : "text-slate-400")}>{pln(remaining)}</div></div>
+      </div>
+      {list.length > 0 && (
+        <div className="mb-3 divide-y divide-slate-100 rounded-xl border border-slate-100 text-sm">
+          {list.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 px-3 py-2">
+              <span className="text-slate-500">{p.date}</span>
+              <span className="flex-1 truncate text-xs text-slate-400">{"note" in p && p.note ? p.note : ""}</span>
+              <b>{pln(p.amount)}</b>
+              <button className="rounded p-1 text-rose-500 hover:bg-rose-50" aria-label="Usuń wpłatę" onClick={() => onChange(list.filter((x) => x.id !== p.id && x.id !== "legacy").map((x) => x))}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {remaining > 0 && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Data wpłaty" />
+            <input className="input" type="number" step="0.01" min={0} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Kwota wpłaty" />
+          </div>
+          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Notatka (opcjonalnie), np. przelew 1/2" />
+          <Button className="w-full" variant="secondary" size="sm" icon={<Plus className="h-4 w-4" />} onClick={add} disabled={!amount || amount <= 0}>Dodaj wpłatę</Button>
+        </div>
+      )}
+    </Card>
   );
 }

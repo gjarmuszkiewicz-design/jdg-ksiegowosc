@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { invoiceTotals, itemTotals } from "@/lib/invoice";
+import { invoiceTotals, isProforma, itemTotals, paidAmount, paymentState, remainingAmount } from "@/lib/invoice";
 import { amountInWords, num2, pln } from "@/lib/money";
 import { vatRateLabel } from "@/lib/tax";
 import { formatIban } from "@/lib/validation";
@@ -23,6 +23,11 @@ const s: Record<string, CSSProperties> = {
 
 export function InvoiceDocument({ invoice, company }: { invoice: Invoice; company: Company }) {
   const t = invoiceTotals(invoice);
+  const proforma = isProforma(invoice);
+  const paid = paidAmount(invoice);
+  const remaining = remainingAmount(invoice);
+  const state = paymentState(invoice);
+  const payments = [...(invoice.payments ?? [])].sort((a, b) => a.date.localeCompare(b.date));
   const exempt = t.rates.some((r) => r.rate === "zw");
   return (
     <div style={s.page}>
@@ -34,7 +39,7 @@ export function InvoiceDocument({ invoice, company }: { invoice: Invoice; compan
           {company.email && <div style={s.muted}>{company.email}{company.phone ? ` · ${company.phone}` : ""}</div>}
         </div>
         <div style={{ textAlign: "right" }}>
-          <h1 style={s.h1}>Faktura{exempt && t.vat === 0 ? "" : " VAT"}</h1>
+          <h1 style={s.h1}>{proforma ? "Faktura proforma" : `Faktura${exempt && t.vat === 0 ? "" : " VAT"}`}</h1>
           <div style={{ fontSize: 14, fontWeight: 600 }}>nr {invoice.number}</div>
           <div style={s.muted}>Data wystawienia: {invoice.issueDate}{invoice.place ? `, ${invoice.place}` : ""}</div>
           <div style={s.muted}>Data sprzedaży: {invoice.saleDate}</div>
@@ -101,7 +106,20 @@ export function InvoiceDocument({ invoice, company }: { invoice: Invoice; compan
           {invoice.paymentMethod === "przelew" && company.bankAccount && (
             <div>Konto: <b>{formatIban(company.bankAccount)}</b>{company.bankName ? ` (${company.bankName})` : ""}</div>
           )}
-          {invoice.status === "oplacona" && <div style={{ color: "#059669", fontWeight: 700, marginTop: 4 }}>ZAPŁACONO {invoice.paidDate ?? ""}</div>}
+          {state === "oplacona" && <div style={{ color: "#059669", fontWeight: 700, marginTop: 4 }}>ZAPŁACONO W CAŁOŚCI {invoice.paidDate ?? payments.at(-1)?.date ?? ""}</div>}
+          {payments.length > 0 && state !== "oplacona" && (
+            <div style={{ marginTop: 8, fontSize: 11 }}>
+              <div style={{ fontWeight: 700 }}>Wpłaty:</div>
+              {payments.map((p) => (
+                <div key={p.id}>{p.date} — {pln(p.amount)}{p.note ? ` (${p.note})` : ""}</div>
+              ))}
+            </div>
+          )}
+          {proforma && (
+            <div style={{ marginTop: 10, fontSize: 11, color: "#b45309", fontWeight: 600 }}>
+              Dokument nie jest fakturą VAT i nie stanowi podstawy do odliczenia podatku. Fakturę wystawimy po zapłacie / wykonaniu usługi.
+            </div>
+          )}
           {exempt && <div style={{ marginTop: 8, fontSize: 11 }}>Zwolnienie z VAT: {company.vatExemptionBasis}</div>}
           {invoice.notes && <div style={{ marginTop: 8, fontSize: 11 }}><b>Uwagi:</b> {invoice.notes}</div>}
         </div>
@@ -118,11 +136,27 @@ export function InvoiceDocument({ invoice, company }: { invoice: Invoice; compan
               ))}
             </tbody>
           </table>
-          <div style={s.totalBox}>
-            <div style={{ fontSize: 11, opacity: 0.8 }}>Do zapłaty</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{pln(t.gross)}</div>
-            <div style={{ fontSize: 10, opacity: 0.85 }}>Słownie: {amountInWords(t.gross)}</div>
-          </div>
+          {state === "czesciowo" ? (
+            <>
+              <table style={{ ...s.table, marginBottom: 0, marginTop: 6 }}>
+                <tbody>
+                  <tr><td style={s.td}>Razem brutto</td><td style={{ ...s.td, ...s.right, fontWeight: 600 }}>{pln(t.gross)}</td></tr>
+                  <tr><td style={s.td}>Zapłacono</td><td style={{ ...s.td, ...s.right, color: "#059669", fontWeight: 600 }}>{pln(paid)}</td></tr>
+                </tbody>
+              </table>
+              <div style={s.totalBox}>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>Pozostało do zapłaty</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{pln(remaining)}</div>
+                <div style={{ fontSize: 10, opacity: 0.85 }}>Słownie: {amountInWords(remaining)}</div>
+              </div>
+            </>
+          ) : (
+            <div style={s.totalBox}>
+              <div style={{ fontSize: 11, opacity: 0.8 }}>{state === "oplacona" ? "Razem (zapłacono)" : "Do zapłaty"}</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{pln(t.gross)}</div>
+              <div style={{ fontSize: 10, opacity: 0.85 }}>Słownie: {amountInWords(t.gross)}</div>
+            </div>
+          )}
         </div>
       </div>
 

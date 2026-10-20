@@ -47,6 +47,16 @@ app.get("/api/state", async (req: AuthedRequest, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST — używany przez navigator.sendBeacon przy zamykaniu karty (beacon nie obsługuje PUT)
+app.post("/api/state", async (req: AuthedRequest, res, next) => {
+  try {
+    const state = req.body?.state;
+    if (!state || typeof state !== "object") return res.status(400).json({ ok: false, message: "Brak danych." });
+    const st = await storage.putState(req.user!.id, state);
+    res.json({ ok: true, updatedAt: st.updatedAt });
+  } catch (e) { next(e); }
+});
+
 app.put("/api/state", async (req: AuthedRequest, res, next) => {
   try {
     const state = req.body?.state;

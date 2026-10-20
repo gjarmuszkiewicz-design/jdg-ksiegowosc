@@ -3,7 +3,7 @@ import { Building2, DownloadCloud, FilePlus2, Mail, MapPin, Pencil, Plus, Search
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Tip, Toggle } from "@/components/ui";
-import { invoiceTotals } from "@/lib/invoice";
+import { invoiceTotals, isAccounting } from "@/lib/invoice";
 import { pln, round2 } from "@/lib/money";
 import { cleanNip, isValidNip } from "@/lib/validation";
 import { uid, useStore } from "@/store/useStore";
@@ -30,7 +30,7 @@ export default function Contractors() {
   const stats = useMemo(() => {
     const m = new Map<string, { count: number; gross: number }>();
     for (const inv of invoices) {
-      if (inv.status === "szkic") continue;
+      if (!isAccounting(inv)) continue;
       const key = inv.buyer.contractorId ?? cleanNip(inv.buyer.nip);
       const s = m.get(key) ?? { count: 0, gross: 0 };
       s.count++;

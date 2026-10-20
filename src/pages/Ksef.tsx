@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Modal, PageHeader, Tip } from "@/components/ui";
 import { parseKsefFa } from "@/lib/importers";
-import { invoiceTotals } from "@/lib/invoice";
+import { invoiceTotals, isAccounting } from "@/lib/invoice";
 import { buildFa3Xml } from "@/lib/ksef";
 import { num2, pln, round2 } from "@/lib/money";
 import { cleanNip } from "@/lib/validation";
@@ -34,7 +34,7 @@ interface PurchaseItem {
 }
 
 /** Faktura może być wysłana: wystawiona, bez numeru KSeF (także wystawiona wcześniej w innym programie) */
-const canSend = (i: Invoice) => i.status !== "szkic" && !i.ksef.number && (i.ksef.status === "brak" || i.ksef.status === "odrzucona");
+const canSend = (i: Invoice) => isAccounting(i) && !i.ksef.number && (i.ksef.status === "brak" || i.ksef.status === "odrzucona");
 
 interface Health {
   ksefMode?: string;
@@ -73,7 +73,7 @@ export default function Ksef() {
   const connected = !!company.ksefToken;
   const tokenHeaders: Record<string, string> = company.ksefToken ? { "x-ksef-token": company.ksefToken } : {};
 
-  const list = useMemo(() => invoices.filter((i) => i.status !== "szkic").sort((a, b) => b.issueDate.localeCompare(a.issueDate)), [invoices]);
+  const list = useMemo(() => invoices.filter((i) => isAccounting(i)).sort((a, b) => b.issueDate.localeCompare(a.issueDate)), [invoices]);
   const sendable = list.filter(canSend);
   const accepted = list.filter((i) => i.ksef.status === "przyjeta" || i.ksef.number).length;
 

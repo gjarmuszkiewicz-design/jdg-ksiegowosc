@@ -1,6 +1,6 @@
 import { monthlyDepreciation } from "./assets";
 import { PARAMS_2026 as P } from "./config2026";
-import { invoiceTotals, rateValue } from "./invoice";
+import { invoiceTotals, rateValue, isAccounting } from "./invoice";
 import { round2 } from "./money";
 import type { Company, Cost, FixedAsset, Invoice, TaxForm, VatRate } from "./types";
 
@@ -16,7 +16,7 @@ export const monthLabel = (mk: string) => {
   return `${MONTHS_PL[m - 1]} ${y}`;
 };
 
-const booked = (inv: Invoice) => inv.status !== "szkic";
+const booked = (inv: Invoice) => isAccounting(inv);
 
 // ───────────────────────── Przychody i koszty ─────────────────────────
 

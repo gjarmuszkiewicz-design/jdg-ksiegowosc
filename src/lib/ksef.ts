@@ -1,4 +1,4 @@
-import { invoiceTotals, itemTotals } from "./invoice";
+import { invoiceTotals, itemTotals, paymentState } from "./invoice";
 import { cleanNip } from "./validation";
 import { amt, esc, tag } from "./xml";
 import type { Company, Invoice } from "./types";
@@ -14,6 +14,21 @@ const FA_FIELDS: Record<string, [string, string | null]> = {
 };
 
 const PAYMENT_CODES = { gotowka: 1, karta: 2, przelew: 6 } as const;
+
+/** Sekcja zapłaty: całość jednorazowo, zapłaty częściowe (ZnacznikZaplatyCzesciowej) albo termin płatności */
+function platnoscXml(inv: Invoice) {
+  const state = paymentState(inv);
+  const payments = [...(inv.payments ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+  if (state === "oplacona" && payments.length <= 1) return `<Zaplacono>1</Zaplacono>${tag("DataZaplaty", payments[0]?.date ?? inv.paidDate ?? inv.issueDate)}`;
+  const termin = `<TerminPlatnosci>${tag("Termin", inv.dueDate)}</TerminPlatnosci>`;
+  if (!payments.length) return termin;
+  const parts = payments
+    .slice(0, 100)
+    .map((p) => `<ZaplataCzesciowa>${tag("KwotaZaplatyCzesciowej", amt(p.amount))}${tag("DataZaplatyCzesciowej", p.date)}</ZaplataCzesciowa>`)
+    .join("");
+  // 1 — zapłacono w części; 2 — zapłacono w całości w kilku częściach
+  return `<ZnacznikZaplatyCzesciowej>${state === "oplacona" ? 2 : 1}</ZnacznikZaplatyCzesciowej>${parts}${state === "oplacona" ? "" : termin}`;
+}
 
 /**
  * Buduje XML e-faktury w strukturze FA(3) dla KSeF.
@@ -82,7 +97,7 @@ export function buildFa3Xml(company: Company, inv: Invoice): string {
     ${inv.notes ? `<DodatkowyOpis><Klucz>Uwagi</Klucz><Wartosc>${esc(inv.notes)}</Wartosc></DodatkowyOpis>` : ""}
     ${rows}
     <Platnosc>
-      ${inv.status === "oplacona" ? `<Zaplacono>1</Zaplacono>${tag("DataZaplaty", inv.paidDate)}` : `<TerminPlatnosci>${tag("Termin", inv.dueDate)}</TerminPlatnosci>`}
+      ${platnoscXml(inv)}
       ${tag("FormaPlatnosci", PAYMENT_CODES[inv.paymentMethod])}
       ${company.bankAccount && inv.paymentMethod === "przelew" ? `<RachunekBankowy>${tag("NrRB", company.bankAccount.replace(/\s/g, ""))}${tag("NazwaBanku", company.bankName)}</RachunekBankowy>` : ""}
     </Platnosc>
