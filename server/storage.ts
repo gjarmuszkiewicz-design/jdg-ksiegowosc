@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
+import type { ShopOrderLog, ShopSite } from "../src/lib/types";
 
 export interface User {
   id: string;
@@ -21,6 +22,19 @@ export interface StoredState {
   updatedAt: string;
 }
 
+/** Połączony sklep wraz z właścicielem i skrótem klucza API (sam klucz nie jest przechowywany) */
+export interface Integration extends ShopSite {
+  userId: string;
+  keyHash: string;
+}
+
+/** Zamówienie ze sklepu przetworzone przez aplikację (chroni przed podwójną fakturą) */
+export interface IntegrationOrder extends ShopOrderLog {
+  userId: string;
+  /** Losowy token publicznego linku do PDF faktury */
+  publicToken?: string;
+}
+
 /** Magazyn danych: użytkownicy, sesje i stan księgowości (jeden dokument JSON na użytkownika) */
 export interface Storage {
   kind: "postgres" | "plik";
@@ -36,6 +50,15 @@ export interface Storage {
   deleteUserSessions(userId: string, exceptToken?: string): Promise<void>;
   getState(userId: string): Promise<StoredState | undefined>;
   putState(userId: string, state: unknown): Promise<StoredState>;
+  listIntegrations(userId: string): Promise<Integration[]>;
+  getIntegration(id: string): Promise<Integration | undefined>;
+  getIntegrationByKeyHash(hash: string): Promise<Integration | undefined>;
+  saveIntegration(i: Integration): Promise<void>;
+  deleteIntegration(id: string): Promise<void>;
+  getIntegrationOrder(siteId: string, orderId: string): Promise<IntegrationOrder | undefined>;
+  getIntegrationOrderByToken(token: string): Promise<IntegrationOrder | undefined>;
+  saveIntegrationOrder(o: IntegrationOrder): Promise<void>;
+  listIntegrationOrders(userId: string, limit: number): Promise<IntegrationOrder[]>;
 }
 
 class PostgresStorage implements Storage {
@@ -56,6 +79,14 @@ class PostgresStorage implements Storage {
       create table if not exists app_state (
         user_id text primary key references users(id) on delete cascade,
         state jsonb not null, updated_at timestamptz not null default now());
+      create table if not exists integrations (
+        id text primary key, user_id text not null references users(id) on delete cascade,
+        key_hash text unique not null, data jsonb not null);
+      create table if not exists integration_orders (
+        site_id text not null, order_id text not null, user_id text not null references users(id) on delete cascade,
+        public_token text unique, data jsonb not null, created_at timestamptz not null default now(),
+        primary key (site_id, order_id));
+      create index if not exists integration_orders_user on integration_orders (user_id, created_at desc);
     `);
     await this.pool.query("delete from sessions where expires_at < now()");
   }
@@ -104,12 +135,49 @@ class PostgresStorage implements Storage {
     );
     return { state, updatedAt: new Date(r.rows[0].updated_at).toISOString() };
   }
+  async listIntegrations(userId: string) {
+    return (await this.pool.query("select data from integrations where user_id = $1", [userId])).rows.map((r) => r.data as Integration);
+  }
+  async getIntegration(id: string) {
+    return (await this.pool.query("select data from integrations where id = $1", [id])).rows[0]?.data as Integration | undefined;
+  }
+  async getIntegrationByKeyHash(hash: string) {
+    return (await this.pool.query("select data from integrations where key_hash = $1", [hash])).rows[0]?.data as Integration | undefined;
+  }
+  async saveIntegration(i: Integration) {
+    await this.pool.query(
+      `insert into integrations (id, user_id, key_hash, data) values ($1,$2,$3,$4)
+       on conflict (id) do update set key_hash = excluded.key_hash, data = excluded.data`,
+      [i.id, i.userId, i.keyHash, JSON.stringify(i)],
+    );
+  }
+  async deleteIntegration(id: string) {
+    await this.pool.query("delete from integrations where id = $1", [id]);
+  }
+  async getIntegrationOrder(siteId: string, orderId: string) {
+    return (await this.pool.query("select data from integration_orders where site_id = $1 and order_id = $2", [siteId, orderId])).rows[0]?.data as IntegrationOrder | undefined;
+  }
+  async getIntegrationOrderByToken(token: string) {
+    return (await this.pool.query("select data from integration_orders where public_token = $1", [token])).rows[0]?.data as IntegrationOrder | undefined;
+  }
+  async saveIntegrationOrder(o: IntegrationOrder) {
+    await this.pool.query(
+      `insert into integration_orders (site_id, order_id, user_id, public_token, data) values ($1,$2,$3,$4,$5)
+       on conflict (site_id, order_id) do update set public_token = excluded.public_token, data = excluded.data`,
+      [o.siteId, o.orderId, o.userId, o.publicToken ?? null, JSON.stringify(o)],
+    );
+  }
+  async listIntegrationOrders(userId: string, limit: number) {
+    return (await this.pool.query("select data from integration_orders where user_id = $1 order by created_at desc limit $2", [userId, limit])).rows.map((r) => r.data as IntegrationOrder);
+  }
 }
 
 interface FileDb {
   users: User[];
   sessions: Session[];
   states: Record<string, StoredState>;
+  integrations?: Integration[];
+  integrationOrders?: IntegrationOrder[];
 }
 
 /** Zapis w pliku JSON — do pracy lokalnej. Na Railway bez wolumenu dane znikają przy każdym wdrożeniu. */
@@ -165,6 +233,28 @@ class FileStorage implements Storage {
     this.db.states[userId] = st;
     await this.flush();
     return st;
+  }
+  private get ints() { return (this.db.integrations ??= []); }
+  private get orders() { return (this.db.integrationOrders ??= []); }
+  async listIntegrations(userId: string) { return this.ints.filter((i) => i.userId === userId); }
+  async getIntegration(id: string) { return this.ints.find((i) => i.id === id); }
+  async getIntegrationByKeyHash(hash: string) { return this.ints.find((i) => i.keyHash === hash); }
+  async saveIntegration(i: Integration) {
+    this.db.integrations = [...this.ints.filter((x) => x.id !== i.id), i];
+    await this.flush();
+  }
+  async deleteIntegration(id: string) {
+    this.db.integrations = this.ints.filter((x) => x.id !== id);
+    await this.flush();
+  }
+  async getIntegrationOrder(siteId: string, orderId: string) { return this.orders.find((o) => o.siteId === siteId && o.orderId === orderId); }
+  async getIntegrationOrderByToken(token: string) { return this.orders.find((o) => o.publicToken === token); }
+  async saveIntegrationOrder(o: IntegrationOrder) {
+    this.db.integrationOrders = [...this.orders.filter((x) => !(x.siteId === o.siteId && x.orderId === o.orderId)), o];
+    await this.flush();
+  }
+  async listIntegrationOrders(userId: string, limit: number) {
+    return this.orders.filter((o) => o.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
   }
 }
 

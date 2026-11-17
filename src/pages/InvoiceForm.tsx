@@ -3,13 +3,13 @@ import { ArrowLeft, Banknote, Building2, CloudUpload, Download, FileCheck2, Mail
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, CardHeader, Field, Hint, PageHeader, Tabs, Tip, Toggle } from "@/components/ui";
-import { invoiceTotals, isProforma, itemTotals, markPaid, nextNumberFor, paidAmount, paymentState, remainingAmount, VAT_RATES, withPayments } from "@/lib/invoice";
+import { invoiceTotals, isProforma, itemTotals, markPaid, nextNumberFor, paidAmount, paymentState, rateValue, remainingAmount, VAT_RATES, withPayments } from "@/lib/invoice";
 import { buildFa3Xml } from "@/lib/ksef";
-import { pln } from "@/lib/money";
+import { pln, round2 } from "@/lib/money";
 import { vatRateLabel } from "@/lib/tax";
 import { cleanNip, isValidNip } from "@/lib/validation";
 import { downloadFile } from "@/lib/xml";
-import type { Invoice, InvoiceItem, InvoiceKind, PaymentMethod } from "@/lib/types";
+import type { Invoice, InvoiceItem, InvoiceKind, PaymentMethod, PriceMode } from "@/lib/types";
 import { todayIso, uid, useStore } from "@/store/useStore";
 import { SendInvoiceModal } from "./SendInvoiceModal";
 
@@ -121,6 +121,18 @@ export default function InvoiceForm() {
   const remaining = remainingAmount(inv);
   const payState = paymentState(inv);
 
+  const grossMode = inv.priceMode === "brutto";
+  /** Zmiana netto ⇄ brutto: przeliczamy ceny, żeby kwoty na fakturze się nie zmieniły */
+  const switchPriceMode = (mode: PriceMode) => {
+    if ((inv.priceMode ?? "netto") === mode) return;
+    const items = inv.items.map((it) => {
+      const r = rateValue(it.vatRate);
+      return mode === "brutto" ? { ...it, grossPrice: round2(it.netPrice * (1 + r)) } : { ...it, netPrice: round2((it.grossPrice ?? 0) / (1 + r)) };
+    });
+    setInv((s) => ({ ...s, priceMode: mode, items }));
+    setSaved(false);
+  };
+
   const switchKind = (kind: InvoiceKind) => {
     if ((inv.kind ?? "faktura") === kind) return;
     setInv((s) => ({ ...s, kind, number: nextNumberFor(company, invoices, kind, s.issueDate) }));
@@ -176,6 +188,14 @@ export default function InvoiceForm() {
           <span className="text-sm text-slate-500">{proforma ? "Proforma to oferta do zapłaty — nie jest fakturą i nie wchodzi do VAT ani podatku." : "Dokument księgowy — trafi do VAT, podatku i KSeF."}</span>
         </div>
       )}
+      {inv.shopOrder && (
+        <div className="mb-4">
+          <Tip tone="info" title="Faktura ze sklepu internetowego">
+            Wystawiona automatycznie do zamówienia nr <b>{inv.shopOrder.orderNumber}</b> ze sklepu {inv.shopOrder.siteName}. Klient ma ją w e-mailu i na swoim koncie w sklepie
+            {inv.shopOrder.publicToken && <> (<a className="font-semibold underline" href={`/f/${inv.shopOrder.publicToken}`} target="_blank" rel="noreferrer">PDF dla klienta</a>)</>}. Zmiany w aplikacji będą widoczne w tym PDF.
+          </Tip>
+        </div>
+      )}
       {sourceProforma && <div className="mb-4"><Tip tone="info" title="Faktura końcowa do proformy">Wystawiona na podstawie proformy <b>{sourceProforma.number}</b>{paid > 0 ? ` — wpłaty z proformy (${pln(paid)}) zostały przeniesione.` : "."} Sprawdź dane i kliknij „Wystaw fakturę”.</Tip></div>}
       {proforma && finalInvoice && <div className="mb-4"><Tip tone="success" title="Faktura końcowa wystawiona">Do tej proformy wystawiono fakturę <b>{finalInvoice.number}</b>. <Button size="sm" variant="secondary" to={`/faktury/${finalInvoice.id}`}>Otwórz fakturę</Button></Tip></div>}
       {locked && <div className="mb-4"><Tip tone="warning" title="Faktura jest w KSeF">Zmiany po wysłaniu do KSeF wymagają wystawienia faktury korygującej. Edytuj tylko dane wewnętrzne (np. status płatności).</Tip></div>}
@@ -227,9 +247,20 @@ export default function InvoiceForm() {
           <Card>
             <CardHeader title="2. Pozycje" subtitle="Co sprzedajesz?" icon={<Plus className="h-5 w-5" />} />
             <div className="space-y-3 p-5">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="text-slate-500">Ceny podajesz:</span>
+                <div className="inline-flex rounded-xl bg-slate-100 p-1">
+                  {(["netto", "brutto"] as const).map((m) => (
+                    <button key={m} type="button" onClick={() => switchPriceMode(m)} className={clsx("rounded-lg px-3 py-1 font-medium", (inv.priceMode ?? "netto") === m ? "bg-white text-brand-700 shadow-sm" : "text-slate-500")}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <Hint text="Od brutto liczą zwykle sklepy internetowe: VAT wylicza się z sumy kwot brutto w danej stawce (art. 106e ust. 7 ustawy o VAT)." />
+              </div>
               <datalist id="item-names">{itemNames.map((n) => <option key={n} value={n} />)}</datalist>
               {inv.items.map((it, idx) => {
-                const t = itemTotals(it);
+                const t = itemTotals(it, inv.priceMode);
                 return (
                   <div key={it.id} className="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
@@ -248,8 +279,12 @@ export default function InvoiceForm() {
                         </select>
                       </div>
                       <div className="sm:col-span-2">
-                        <span className="label">Cena netto</span>
-                        <input className="input" type="number" min={0} step="0.01" value={it.netPrice || ""} onChange={(e) => setItem(it.id, { netPrice: Number(e.target.value) })} placeholder="0,00" />
+                        <span className="label">{grossMode ? "Cena brutto" : "Cena netto"}</span>
+                        {grossMode ? (
+                          <input className="input" type="number" min={0} step="0.01" value={it.grossPrice || ""} onChange={(e) => setItem(it.id, { grossPrice: Number(e.target.value) })} placeholder="0,00" />
+                        ) : (
+                          <input className="input" type="number" min={0} step="0.01" value={it.netPrice || ""} onChange={(e) => setItem(it.id, { netPrice: Number(e.target.value) })} placeholder="0,00" />
+                        )}
                       </div>
                       <div>
                         <span className="label">VAT</span>

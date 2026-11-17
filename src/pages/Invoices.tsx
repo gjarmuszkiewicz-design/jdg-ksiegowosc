@@ -142,7 +142,7 @@ export default function Invoices() {
                         {inv.status === "szkic" ? "—" : remainingAmount(inv) > 0 ? <span className="font-semibold text-amber-700">{pln(remainingAmount(inv))}</span> : <span className="text-emerald-600">0,00 zł</span>}
                         {paymentState(inv) === "czesciowo" && <div className="text-[11px] text-slate-400">zapł. {pln(paidAmount(inv))}</div>}
                       </td>
-                      <td className="table-cell"><div className="flex flex-wrap gap-1">{isProforma(inv) && <Badge tone="violet">proforma</Badge>}{invoiceStatusBadge(inv)}{!isProforma(inv) && ksefBadge(inv)}{inv.finalInvoiceId && <Badge tone="green">faktura wystawiona</Badge>}</div></td>
+                      <td className="table-cell"><div className="flex flex-wrap gap-1">{isProforma(inv) && <Badge tone="violet">proforma</Badge>}{invoiceStatusBadge(inv)}{!isProforma(inv) && ksefBadge(inv)}{inv.finalInvoiceId && <Badge tone="green">faktura wystawiona</Badge>}{inv.shopOrder && <Badge tone="blue">sklep: {inv.shopOrder.siteName} #{inv.shopOrder.orderNumber}</Badge>}</div></td>
                       <td className="table-cell">
                         <div className="flex justify-end gap-1 opacity-70 group-hover:opacity-100">
                           {paymentState(inv) !== "oplacona" && inv.status !== "szkic" && (

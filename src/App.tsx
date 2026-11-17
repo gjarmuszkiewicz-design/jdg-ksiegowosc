@@ -29,6 +29,7 @@ import Payments from "./pages/Payments";
 import Assets from "./pages/Assets";
 import AssetForm from "./pages/AssetForm";
 import CostGuide from "./pages/CostGuide";
+import Integrations from "./pages/Integrations";
 
 function Splash({ text }: { text: string }) {
   return (
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="faktury/:id" element={<InvoiceForm />} />
         <Route path="kontrahenci" element={<Contractors />} />
         <Route path="ksef" element={<Ksef />} />
+        <Route path="integracje" element={<Integrations />} />
         <Route path="koszty" element={<Costs />} />
         <Route path="koszty/nowy" element={<CostForm />} />
         <Route path="koszty/poradnik" element={<CostGuide />} />

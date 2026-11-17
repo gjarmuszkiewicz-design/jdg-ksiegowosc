@@ -24,6 +24,7 @@ const s: Record<string, CSSProperties> = {
 export function InvoiceDocument({ invoice, company }: { invoice: Invoice; company: Company }) {
   const t = invoiceTotals(invoice);
   const proforma = isProforma(invoice);
+  const gross = invoice.priceMode === "brutto";
   const paid = paidAmount(invoice);
   const remaining = remainingAmount(invoice);
   const state = paymentState(invoice);
@@ -71,7 +72,7 @@ export function InvoiceDocument({ invoice, company }: { invoice: Invoice; compan
             <th style={s.th}>Nazwa towaru / usługi</th>
             <th style={{ ...s.th, ...s.right }}>Ilość</th>
             <th style={s.th}>J.m.</th>
-            <th style={{ ...s.th, ...s.right }}>Cena netto</th>
+            <th style={{ ...s.th, ...s.right }}>{gross ? "Cena brutto" : "Cena netto"}</th>
             <th style={{ ...s.th, ...s.right }}>Wartość netto</th>
             <th style={{ ...s.th, ...s.right }}>VAT</th>
             <th style={{ ...s.th, ...s.right }}>Kwota VAT</th>
@@ -80,14 +81,14 @@ export function InvoiceDocument({ invoice, company }: { invoice: Invoice; compan
         </thead>
         <tbody>
           {invoice.items.map((it, i) => {
-            const v = itemTotals(it);
+            const v = itemTotals(it, invoice.priceMode);
             return (
               <tr key={it.id}>
                 <td style={s.td}>{i + 1}</td>
                 <td style={s.td}>{it.name}</td>
                 <td style={{ ...s.td, ...s.right }}>{it.qty}</td>
                 <td style={s.td}>{it.unit}</td>
-                <td style={{ ...s.td, ...s.right }}>{num2(it.netPrice)}</td>
+                <td style={{ ...s.td, ...s.right }}>{num2(gross ? it.grossPrice ?? 0 : it.netPrice)}</td>
                 <td style={{ ...s.td, ...s.right }}>{num2(v.net)}</td>
                 <td style={{ ...s.td, ...s.right }}>{vatRateLabel(it.vatRate)}</td>
                 <td style={{ ...s.td, ...s.right }}>{num2(v.vat)}</td>

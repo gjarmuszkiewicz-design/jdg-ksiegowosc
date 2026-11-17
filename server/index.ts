@@ -4,12 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import type { BetaContentBlockParam, BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import nodemailer from "nodemailer";
 import { searchArticles } from "../src/lib/knowledge";
 import { ALLOWED_SEARCH_DOMAINS, checkRateLimit, isOnTopic, LIMITS, OFF_TOPIC_MESSAGE } from "./aiGuard";
 import { authRouter, hashPassword, type AuthedRequest } from "./auth";
 import { createStorage } from "./storage";
 import { validateFa3 } from "./xmlValidate";
+import { revOf, saveClientState, stripRev } from "./stateStore";
+import { hasSmtp, sendMail } from "./mail";
+import { integrationsRouter, pluginZip, PLUGIN_VERSION, publicInvoiceRouter, wpRouter } from "./integrations";
 import { KsefClient, simulatePurchases, simulateSend, type KsefEnv } from "./ksef";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,7 +24,6 @@ const KSEF_ENV = (["test", "demo", "prod"].includes(process.env.KSEF_ENV || "") 
 const KSEF_SEND = process.env.KSEF_SEND === "live";
 
 const hasAi = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-const hasSmtp = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
 
 // Czas uruchomienia serwera — pozwala sprawdzić z zewnątrz, czy działa najnowsze wdrożenie
 const BUILD_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) || new Date().toISOString();
@@ -37,34 +38,50 @@ const storage = createStorage();
 const { router: auth, requireAuth } = authRouter(storage);
 app.use("/api/auth", auth);
 
+// Wtyczka WordPress (klucz API sklepu) i publiczne linki do faktur — bez logowania
+app.use("/api/wp/v1", wpRouter(storage));
+app.use(publicInvoiceRouter(storage));
+
 // Wszystkie pozostałe endpointy API wymagają zalogowania (poza /api/health)
 app.use("/api", (req, res, next) => (req.path === "/health" ? next() : requireAuth(req as AuthedRequest, res, next)));
 
 app.get("/api/state", async (req: AuthedRequest, res, next) => {
   try {
     const st = await storage.getState(req.user!.id);
-    res.json({ ok: true, state: st?.state ?? null, updatedAt: st?.updatedAt ?? null });
+    res.json({ ok: true, state: stripRev(st?.state) ?? null, rev: revOf(st?.state), updatedAt: st?.updatedAt ?? null });
   } catch (e) { next(e); }
 });
 
+// Lekkie sprawdzenie, czy serwer ma nowsze dane (np. fakturę ze sklepu)
+app.get("/api/state/rev", async (req: AuthedRequest, res, next) => {
+  try {
+    const st = await storage.getState(req.user!.id);
+    res.json({ ok: true, rev: revOf(st?.state) });
+  } catch (e) { next(e); }
+});
+
+async function putState(req: AuthedRequest, res: Response, next: (e: unknown) => void) {
+  try {
+    const state = req.body?.state;
+    if (!state || typeof state !== "object") return res.status(400).json({ ok: false, message: "Brak danych." });
+    // stara wersja aplikacji nie wysyła baseRev — wtedy zachowujemy wszystkie faktury dodane przez serwer
+    const baseRev = Number.isFinite(Number(req.body?.baseRev)) ? Number(req.body.baseRev) : 0;
+    const r = await saveClientState(storage, req.user!.id, state, baseRev);
+    res.json({ ok: true, ...r });
+  } catch (e) { next(e); }
+}
 // POST — używany przez navigator.sendBeacon przy zamykaniu karty (beacon nie obsługuje PUT)
-app.post("/api/state", async (req: AuthedRequest, res, next) => {
-  try {
-    const state = req.body?.state;
-    if (!state || typeof state !== "object") return res.status(400).json({ ok: false, message: "Brak danych." });
-    const st = await storage.putState(req.user!.id, state);
-    res.json({ ok: true, updatedAt: st.updatedAt });
-  } catch (e) { next(e); }
-});
+app.post("/api/state", putState);
+app.put("/api/state", putState);
 
-app.put("/api/state", async (req: AuthedRequest, res, next) => {
+app.get("/api/integrations/plugin.zip", async (_req, res, next) => {
   try {
-    const state = req.body?.state;
-    if (!state || typeof state !== "object") return res.status(400).json({ ok: false, message: "Brak danych." });
-    const st = await storage.putState(req.user!.id, state);
-    res.json({ ok: true, updatedAt: st.updatedAt });
+    const zip = await pluginZip();
+    res.type("application/zip").setHeader("Content-Disposition", `attachment; filename="jdg-faktury-${PLUGIN_VERSION}.zip"`);
+    res.send(zip);
   } catch (e) { next(e); }
 });
+app.use("/api/integrations", integrationsRouter(storage));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, storage: storage.kind, ai: hasAi(), smtp: hasSmtp(), ksefMode: KSEF_MODE, ksefEnv: KSEF_ENV, ksefSend: KSEF_SEND, model: MODEL });
@@ -229,19 +246,7 @@ app.post("/api/invoices/email", async (req, res) => {
   if (!hasSmtp()) return res.status(501).json({ ok: false, message: "Brak konfiguracji SMTP" });
   if (!to || !subject || !html) return res.status(400).json({ ok: false, message: "Brak adresata, tematu lub treści." });
   try {
-    const transport = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-    });
-    await transport.sendMail({
-      from: process.env.SMTP_FROM,
-      to,
-      subject,
-      html,
-      attachments: xml ? [{ filename: filename || "faktura.xml", content: xml, contentType: "application/xml" }] : [],
-    });
+    await sendMail({ to, subject, html, attachments: xml ? [{ filename: filename || "faktura.xml", content: xml, contentType: "application/xml" }] : [] });
     res.json({ ok: true, message: `Wysłano do ${to}` });
   } catch (err) {
     console.error("[email]", err);

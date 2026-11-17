@@ -1,5 +1,5 @@
 import { round2 } from "./money";
-import type { Company, Invoice, InvoiceItem, InvoiceKind, InvoicePayment, VatRate } from "./types";
+import type { Company, Invoice, InvoiceItem, InvoiceKind, InvoicePayment, PriceMode, VatRate } from "./types";
 
 export const VAT_RATES: { value: VatRate; label: string }[] = [
   { value: "23", label: "23%" },
@@ -12,7 +12,15 @@ export const VAT_RATES: { value: VatRate; label: string }[] = [
 
 export const rateValue = (r: VatRate) => (r === "zw" || r === "np" ? 0 : Number(r) / 100);
 
-export function itemTotals(item: InvoiceItem) {
+/** VAT „w stu” — wyliczany z kwoty brutto: brutto × stawka / (100 + stawka) */
+const vatFromGross = (gross: number, r: VatRate) => round2((gross * rateValue(r)) / (1 + rateValue(r)));
+
+export function itemTotals(item: InvoiceItem, mode: PriceMode = "netto") {
+  if (mode === "brutto") {
+    const gross = round2(item.qty * (item.grossPrice ?? 0));
+    const vat = vatFromGross(gross, item.vatRate);
+    return { net: round2(gross - vat), vat, gross };
+  }
   const net = round2(item.qty * item.netPrice);
   const vat = round2(net * rateValue(item.vatRate));
   return { net, vat, gross: round2(net + vat) };
@@ -25,8 +33,22 @@ export interface RateSummary {
   gross: number;
 }
 
-/** Podsumowanie według stawek — VAT liczony od sumy wartości netto w danej stawce (art. 106e ust. 10) */
-export function invoiceTotals(inv: Pick<Invoice, "items">) {
+/**
+ * Podsumowanie według stawek — VAT liczony od sumy wartości netto w danej stawce (art. 106e ust. 10),
+ * a przy fakturze „od brutto” od sumy wartości brutto w danej stawce (art. 106e ust. 7–8)
+ */
+export function invoiceTotals(inv: Pick<Invoice, "items"> & { priceMode?: PriceMode }) {
+  if (inv.priceMode === "brutto") {
+    const byGross = new Map<VatRate, number>();
+    for (const it of inv.items) byGross.set(it.vatRate, round2((byGross.get(it.vatRate) ?? 0) + round2(it.qty * (it.grossPrice ?? 0))));
+    const rates = [...byGross.entries()].map(([rate, gross]) => {
+      const vat = vatFromGross(gross, rate);
+      return { rate, net: round2(gross - vat), vat, gross };
+    });
+    const gross = round2(rates.reduce((a, r) => a + r.gross, 0));
+    const vat = round2(rates.reduce((a, r) => a + r.vat, 0));
+    return { rates, net: round2(gross - vat), vat, gross };
+  }
   const byRate = new Map<VatRate, RateSummary>();
   for (const it of inv.items) {
     const net = round2(it.qty * it.netPrice);
@@ -43,7 +65,8 @@ export function invoiceTotals(inv: Pick<Invoice, "items">) {
   return { rates, net, vat, gross: round2(net + vat) };
 }
 
-export function nextInvoiceNumber(pattern: string, invoices: Invoice[], issueDate: string) {
+/** `newSeries` — osobna seria (np. sklepu): bez dopasowanych numerów zaczynamy od 1, a nie od liczby faktur w okresie */
+export function nextInvoiceNumber(pattern: string, invoices: Invoice[], issueDate: string, newSeries = false) {
   const [y, m] = issueDate.split("-");
   const monthly = pattern.includes("{MM}");
   const fill = (nr: string) => pattern.replace("{NR}", nr).replace("{MM}", m).replace("{RRRR}", y);
@@ -55,6 +78,7 @@ export function nextInvoiceNumber(pattern: string, invoices: Invoice[], issueDat
     const match = i.number.trim().match(re);
     if (match) max = Math.max(max, Number(match[1]));
   }
+  if (!max && newSeries) return fill("1");
   if (!max) {
     const samePeriod = invoices.filter((i) => {
       const [iy, im] = i.issueDate.split("-");

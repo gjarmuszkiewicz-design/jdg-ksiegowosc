@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import {
   Banknote, BarChart3, BookOpen, Calculator, Car, CheckCircle2, CloudOff, GraduationCap, Loader2, LogOut, Upload, BookText, Building2, CloudUpload, FilePlus2, FileText, Landmark, LayoutDashboard,
-  Menu, Percent, PiggyBank, Receipt, Settings, ShieldCheck, Sparkles, Users, Wallet, X,
+  Menu, Percent, PiggyBank, Receipt, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -31,6 +31,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { to: "/faktury/nowa", label: "Wystaw fakturę", icon: <FilePlus2 /> },
       { to: "/kontrahenci", label: "Kontrahenci", icon: <Users /> },
       { to: "/ksef", label: "KSeF", icon: <CloudUpload /> },
+      { to: "/integracje", label: "Sklepy WordPress", icon: <Store /> },
     ],
   },
   {

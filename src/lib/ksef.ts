@@ -46,8 +46,10 @@ export function buildFa3Xml(company: Company, inv: Invoice): string {
 
   const rows = inv.items
     .map((it, i) => {
-      const it2 = itemTotals(it);
-      return `<FaWiersz>${tag("NrWierszaFa", i + 1)}${tag("P_7", it.name)}${tag("P_8A", it.unit)}${tag("P_8B", it.qty)}${tag("P_9A", amt(it.netPrice))}${tag("P_11", amt(it2.net))}${tag("P_12", it.vatRate)}</FaWiersz>`;
+      const it2 = itemTotals(it, inv.priceMode);
+      // faktura od brutto: cena jednostkowa brutto (P_9B) i wartość brutto (P_11A)
+      const prices = inv.priceMode === "brutto" ? tag("P_9B", amt(it.grossPrice ?? 0)) + tag("P_11A", amt(it2.gross)) : tag("P_9A", amt(it.netPrice)) + tag("P_11", amt(it2.net));
+      return `<FaWiersz>${tag("NrWierszaFa", i + 1)}${tag("P_7", it.name)}${tag("P_8A", it.unit)}${tag("P_8B", it.qty)}${prices}${tag("P_12", it.vatRate)}</FaWiersz>`;
     })
     .join("\n    ");
 

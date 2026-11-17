@@ -86,8 +86,13 @@ export interface InvoiceItem {
   qty: number;
   unit: string;
   netPrice: number;
+  /** Cena jednostkowa brutto — używana, gdy faktura liczona jest od brutto (np. ze sklepu internetowego) */
+  grossPrice?: number;
   vatRate: VatRate;
 }
+
+/** Sposób liczenia faktury: od cen netto (domyślnie) albo od cen brutto (art. 106e ust. 7 — typowe dla sklepów) */
+export type PriceMode = "netto" | "brutto";
 
 export type InvoiceStatus = "szkic" | "wystawiona" | "wyslana" | "oplacona";
 export type InvoiceKind = "faktura" | "proforma";
@@ -125,8 +130,14 @@ export interface Invoice {
   proformaId?: string;
   /** Proforma: faktura końcowa wystawiona na jej podstawie */
   finalInvoiceId?: string;
-  /** Skąd pochodzi dokument, np. "import:JPK_V7M" */
+  /** Skąd pochodzi dokument, np. "import:JPK_V7M" albo "sklep:<id strony>" */
   source?: string;
+  /** Liczenie od netto (domyślnie) lub od brutto */
+  priceMode?: PriceMode;
+  /** Zamówienie ze sklepu internetowego, z którego powstała faktura */
+  shopOrder?: { siteId: string; siteName: string; orderId: string; orderNumber: string; publicToken?: string };
+  /** Numer wersji danych na serwerze, w której serwer dodał ten dokument (faktury ze sklepów) */
+  serverRev?: number;
 }
 
 export type CostCategory =
@@ -215,4 +226,44 @@ export interface FixedAsset {
   costId?: string;
   isIntangible: boolean;
   createdAt: string;
+}
+
+/** Ustawienia połączonego sklepu (WordPress / WooCommerce) */
+export interface ShopSiteSettings {
+  /** Kiedy wystawiać fakturę: tylko gdy klient zaznaczy „Chcę fakturę” albo do każdego zamówienia */
+  invoiceMode: "na_zadanie" | "zawsze";
+  /** Własny wzór numeracji dla sklepu, np. SKLEP/{NR}/{MM}/{RRRR}; pusty = główna numeracja faktur */
+  numberPattern: string;
+  /** Kto wysyła fakturę klientowi: sklep (poczta WordPressa), aplikacja (SMTP) albo nikt */
+  emailBy: "sklep" | "aplikacja" | "brak";
+  /** Stawka VAT, gdy sklep nie nalicza podatków */
+  defaultVatRate: VatRate;
+  /** Opłacone zamówienie = faktura od razu oznaczona jako zapłacona */
+  markPaid: boolean;
+}
+
+export interface ShopSite {
+  id: string;
+  name: string;
+  url: string;
+  /** Początek klucza API — do rozpoznania, sam klucz widać tylko raz */
+  keyPrefix: string;
+  settings: ShopSiteSettings;
+  active: boolean;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export interface ShopOrderLog {
+  siteId: string;
+  orderId: string;
+  orderNumber: string;
+  status: "wystawiona" | "pominieta" | "blad";
+  message?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  total?: number;
+  customer?: string;
+  createdAt: string;
+  updatedAt: string;
 }

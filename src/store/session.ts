@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Invoice } from "@/lib/types";
 import { useStore } from "./useStore";
 
 export interface SessionUser {
@@ -46,13 +47,45 @@ const snapshot = () => {
 };
 
 let unsubscribe: (() => void) | null = null;
+/** Wersja danych na serwerze, na której pracuje ta karta (serwer dopisuje faktury ze sklepów) */
+let baseRev = 0;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Dodaje faktury, które serwer utworzył w międzyczasie (np. zamówienia ze sklepu) */
+function mergeServerInvoices(added: Invoice[]) {
+  const local = useStore.getState().invoices;
+  const known = new Set(local.map((i) => i.id));
+  const fresh = added.filter((i) => !known.has(i.id));
+  if (!fresh.length) return;
+  applyingRemote = true;
+  useStore.setState({ invoices: [...local, ...fresh] });
+  applyingRemote = false;
+}
+
+/** Co 30 s: czy serwer ma nowe faktury ze sklepów */
+async function pullServerChanges() {
+  if (timer || document.visibilityState === "hidden") return;
+  try {
+    const r = await api<{ rev: number }>("/api/state/rev");
+    if (r.rev <= baseRev) return;
+    const st = await api<{ state: { invoices?: Invoice[] } | null; rev: number }>("/api/state");
+    if (timer) return; // w międzyczasie użytkownik coś zmienił — zapis i tak dołączy nowe faktury
+    const from = baseRev;
+    mergeServerInvoices((st.state?.invoices ?? []).filter((i) => (i.serverRev ?? 0) > from));
+    baseRev = st.rev;
+  } catch (e) {
+    if ((e as { status?: number }).status === 401) handleExpired();
+  }
+}
 let timer: ReturnType<typeof setTimeout> | null = null;
 let applyingRemote = false;
 
 async function pushNow() {
   useSession.setState({ save: "saving" });
   try {
-    const r = await api<{ updatedAt: string }>("/api/state", { method: "PUT", body: JSON.stringify({ state: snapshot() }) });
+    const r = await api<{ updatedAt: string; rev: number; added?: Invoice[] }>("/api/state", { method: "PUT", body: JSON.stringify({ state: snapshot(), baseRev }) });
+    baseRev = r.rev;
+    if (r.added?.length) mergeServerInvoices(r.added);
     useSession.setState({ save: "saved", lastSavedAt: r.updatedAt });
   } catch (e) {
     if ((e as { status?: number }).status === 401) return handleExpired();
@@ -66,7 +99,7 @@ function flushOnLeave() {
   clearTimeout(timer);
   timer = null;
   try {
-    const blob = new Blob([JSON.stringify({ state: snapshot() })], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ state: snapshot(), baseRev })], { type: "application/json" });
     navigator.sendBeacon("/api/state", blob);
   } catch {
     /* przeglądarka bez sendBeacon */
@@ -83,8 +116,13 @@ function startAutosave() {
     if (applyingRemote) return;
     if (timer) clearTimeout(timer);
     useSession.setState({ save: "saving" });
-    timer = setTimeout(pushNow, 800);
+    timer = setTimeout(() => {
+      timer = null;
+      void pushNow();
+    }, 800);
   });
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pullServerChanges, 30_000);
 }
 
 function stopAutosave() {
@@ -92,6 +130,8 @@ function stopAutosave() {
   unsubscribe = null;
   if (timer) clearTimeout(timer);
   timer = null;
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
 }
 
 function clearLocal() {
@@ -115,7 +155,8 @@ function handleExpired() {
 /** Po zalogowaniu: pobierz dane z serwera albo (pierwsze logowanie) przenieś dane z tej przeglądarki */
 async function loadUserData(user: SessionUser) {
   useSession.setState({ status: "syncing", user, error: null });
-  const remote = await api<{ state: Record<string, unknown> | null }>("/api/state");
+  const remote = await api<{ state: Record<string, unknown> | null; rev?: number }>("/api/state");
+  baseRev = remote.rev ?? 0;
   let owner: string | null = null;
   try {
     owner = localStorage.getItem(OWNER_KEY);
