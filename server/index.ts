@@ -11,6 +11,7 @@ import { createStorage } from "./storage";
 import { validateFa3 } from "./xmlValidate";
 import { revOf, saveClientState, stripRev } from "./stateStore";
 import { hasSmtp, sendMail } from "./mail";
+import { scanCostHandler } from "./costScan";
 import { integrationsRouter, pluginZip, PLUGIN_VERSION, publicInvoiceRouter, wpRouter } from "./integrations";
 import { KsefClient, simulatePurchases, simulateSend, type KsefEnv } from "./ksef";
 
@@ -82,6 +83,7 @@ app.get("/api/integrations/plugin.zip", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 app.use("/api/integrations", integrationsRouter(storage));
+app.post("/api/costs/scan", scanCostHandler);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, storage: storage.kind, ai: hasAi(), smtp: hasSmtp(), ksefMode: KSEF_MODE, ksefEnv: KSEF_ENV, ksefSend: KSEF_SEND, model: MODEL });

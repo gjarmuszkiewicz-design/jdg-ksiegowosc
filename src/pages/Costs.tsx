@@ -1,6 +1,7 @@
-import { Download, Pencil, Plus, Receipt, Search, Trash2, Wallet, Percent, TrendingDown } from "lucide-react";
+import { Download, FileUp, Pencil, Plus, Receipt, Search, Trash2, Wallet, Percent, TrendingDown } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { ScanCostModal } from "@/components/ScanCostModal";
 import { Badge, Button, Card, EmptyState, Hint, Modal, PageHeader, Stat, Tip } from "@/components/ui";
 import { COST_CATEGORIES, categoryEmoji, categoryLabel } from "@/lib/costs";
 import { num2, pln, round2 } from "@/lib/money";
@@ -66,6 +67,8 @@ export default function Costs() {
   const [category, setCategory] = useState("");
   const [q, setQ] = useState("");
   const [toDelete, setToDelete] = useState<Cost | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const navigate = useNavigate();
 
   const months = useMemo(() => [...new Set(costs.map((c) => monthKey(c.date)))].sort().reverse(), [costs]);
 
@@ -107,6 +110,9 @@ export default function Costs() {
           <>
             <Button variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} disabled={!filtered.length}>
               Eksport CSV
+            </Button>
+            <Button variant="secondary" icon={<FileUp className="h-4 w-4" />} onClick={() => setScanOpen(true)}>
+              Dodaj z PDF / zdjęcia
             </Button>
             <Button to="/koszty/nowy" icon={<Plus className="h-4 w-4" />}>
               Dodaj koszt
@@ -166,7 +172,7 @@ export default function Costs() {
             icon={<Receipt className="h-6 w-6" />}
             title={costs.length ? "Brak kosztów dla wybranych filtrów" : "Nie masz jeszcze żadnych kosztów"}
             description="Dodaj fakturę zakupową, paragon lub rachunek — aplikacja sama policzy VAT do odliczenia i koszt podatkowy."
-            action={<Button to="/koszty/nowy" icon={<Plus className="h-4 w-4" />}>Dodaj pierwszy koszt</Button>}
+            action={<div className="flex flex-wrap justify-center gap-2"><Button variant="secondary" icon={<FileUp className="h-4 w-4" />} onClick={() => setScanOpen(true)}>Wczytaj fakturę z PDF</Button><Button to="/koszty/nowy" icon={<Plus className="h-4 w-4" />}>Dodaj pierwszy koszt</Button></div>}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -278,6 +284,7 @@ export default function Costs() {
           {toDelete && monthLabel(monthKey(toDelete.date))}.
         </p>
       </Modal>
+      <ScanCostModal open={scanOpen} onClose={() => setScanOpen(false)} onUseInForm={(draft) => navigate("/koszty/nowy", { state: { draft } })} />
     </div>
   );
 }

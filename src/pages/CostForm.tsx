@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { ArrowLeft, Calculator, Save } from "lucide-react";
+import { ArrowLeft, Calculator, FileUp, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, CardHeader, Field, PageHeader, Tabs, Tip, Toggle } from "@/components/ui";
+import { ScanCostModal } from "@/components/ScanCostModal";
 import { PARAMS_2026 as P } from "@/lib/config2026";
 import { COST_CATEGORIES } from "@/lib/costs";
 import { VAT_RATES, rateValue } from "@/lib/invoice";
@@ -36,10 +37,20 @@ export default function CostForm() {
   const navigate = useNavigate();
   const { costs, company, upsertCost, assets } = useStore();
   const existing = costs.find((c) => c.id === id);
-  const [cost, setCost] = useState<Cost>(() => existing ?? emptyCost());
+  // koszt odczytany z PDF (okno „Dodaj z PDF”) przekazany do formularza
+  const draft = (useLocation().state as { draft?: Cost } | null)?.draft;
+  const start = existing ?? draft;
+  const [cost, setCost] = useState<Cost>(() => start ?? emptyCost());
   const [mode, setMode] = useState<"netto" | "brutto">("netto");
-  const [amountInput, setAmountInput] = useState(() => (existing ? String(existing.net) : ""));
-  const [vatTouched, setVatTouched] = useState(!!existing);
+  const [amountInput, setAmountInput] = useState(() => (start ? String(start.net) : ""));
+  const [vatTouched, setVatTouched] = useState(!!start);
+  const [scanOpen, setScanOpen] = useState(false);
+  const fillFromScan = (c: Cost) => {
+    setCost({ ...c, id: cost.id });
+    setMode("netto");
+    setAmountInput(String(c.net));
+    setVatTouched(true);
+  };
   const exempt = company.vatStatus === "zwolniony";
 
   useEffect(() => {
@@ -84,11 +95,19 @@ export default function CostForm() {
         title={existing ? "Edycja kosztu" : "Nowy koszt"}
         subtitle="Wpisz dane z faktury zakupowej lub rachunku — resztę policzymy za Ciebie."
         actions={
-          <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/koszty")}>
-            Wróć do listy
-          </Button>
+          <>
+            {!existing && (
+              <Button variant="secondary" icon={<FileUp className="h-4 w-4" />} onClick={() => setScanOpen(true)}>
+                Wczytaj z PDF / zdjęcia
+              </Button>
+            )}
+            <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/koszty")}>
+              Wróć do listy
+            </Button>
+          </>
         }
       />
+      <ScanCostModal open={scanOpen} onClose={() => setScanOpen(false)} onUseInForm={fillFromScan} onSaved={() => navigate("/koszty")} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
